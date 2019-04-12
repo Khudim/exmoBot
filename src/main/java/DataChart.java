@@ -1,49 +1,41 @@
-import javafx.application.Application;
-import javafx.scene.Scene;
-import javafx.scene.chart.LineChart;
-import javafx.scene.chart.NumberAxis;
-import javafx.scene.chart.XYChart;
-import javafx.stage.Stage;
+import org.knowm.xchart.SwingWrapper;
+import org.knowm.xchart.XYChart;
 
-public class DataChart extends Application {
+import java.util.ArrayList;
 
-    private LineChart<Number, Number> LINE_CHART;
-    private Scene SCENE;
-    private Stage STAGE;
+public class DataChart {
+    private final XYChart chart;
+    private final SwingWrapper sw;
 
-    @Override
-    public void start(Stage stage) {
-        stage.setTitle("Line Chart Sample");
-        final NumberAxis xAxis = new NumberAxis();
-        final NumberAxis yAxis = new NumberAxis();
-        xAxis.setLabel("Date and Time");
-        LINE_CHART = new LineChart<>(xAxis, yAxis);
-        LINE_CHART.setTitle("Price Monitoring");
-        SCENE = new Scene(LINE_CHART, 800, 600);
-        stage.setScene(SCENE);
-        stage.show();
-        STAGE = stage;
+    public DataChart() {
+        String[] seriesNames = {"aine", "pine2", "line3", "dine4"};
+        double[] data = {50, 51, 52, 53, 54, 55};
+        ArrayList<double[]> data2 = new ArrayList<>();
+        data2.add(new double[]{50.0, 51.0, 52.0, 53.0, 54.0, 55.0});
+        data2.add(new double[]{55.0, 54.0, 53.0, 52.0, 51.0, 50.0});
+        data2.add(new double[]{50.0, 50.5, 51.0, 51.5, 52.0, 52.5});
+        data2.add(new double[]{55.0, 54.5, 54.0, 53.5, 53.0, 52.5});
+        chart = QuickChartForGraphs.getChart("Simple XChart Real-time Demo",
+                "Radians", "Sine", seriesNames, data, data2);
+        sw = new SwingWrapper<>(chart);
+        sw.displayChart();
     }
 
-    public DataChart createGraph() {
-        launch(DataChart.class);
+    public DataChart updateGraph(DataChart dataChart, String lineName, double xData,
+                                 double yData) {
+        double[] xxData = {xData};
+        double[] yyData = {yData};
+        dataChart.getChart().updateXYSeries(lineName, xxData, yyData, null);
+        dataChart.getSw().repaintChart();
         return this;
     }
 
-    public XYChart.Series createLine(String lineName) {
-        XYChart.Series series = new XYChart.Series();
-        series.setName(lineName);
-        LINE_CHART.getData().add(series);
-        STAGE.setScene(SCENE);
-        STAGE.show();
-//        series.getData().add(new XYChart.Data(1, 23));
-        return series;
+    public XYChart getChart(){
+        return chart;
     }
 
-    public DataChart addPoint(XYChart.Series series, int time, int value){
-        series.getData().add(new XYChart.Data(time, value));
-        STAGE.setScene(SCENE);
-        STAGE.show();
-        return this;
+    public SwingWrapper getSw(){
+        return sw;
     }
+
 }
