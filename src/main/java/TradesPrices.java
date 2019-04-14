@@ -1,43 +1,56 @@
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 
 public class TradesPrices {
 
     private ArrayList<Double> buyPrice = new ArrayList<>();
     private ArrayList<Double> sellPrice = new ArrayList<>();
+    private String method;
+    private String currencyPair;
 
-    private void method() throws IOException {
+    TradesPrices(String method, String currencyPair){
+        this.method = method;
+        this.currencyPair = currencyPair;
+    }
 
-        String url = "https://api.exmo.me/v1/trades/?pair=BTC_USD&limit=1";
+    TradesPrices(){}
 
-        HttpClient client = HttpClient.newHttpClient();
+    private void method() throws IOException, URISyntaxException {
 
-        HttpRequest getRequest;
-        HttpResponse<String> getResponse;
+        HttpClient client = HttpClientBuilder.create().build();
+
         JSONObject jsonObject;
         String sellOrBuy;
         Double price;
 
+        URI uri = new URIBuilder()
+                .setScheme("http")
+                .setHost("api.exmo.me")
+                .setPath("/v1/" + method)
+                .setParameter("pair", currencyPair)
+                .setParameter("limit", "1")
+                .build();
+
+        HttpGet httpGet;
+        HttpResponse response;
+
         while (true) {
 
-            getRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header("accept", "application/json")
-                    .build();
-
-            try {
-                getResponse = client.send(getRequest, HttpResponse.BodyHandlers.ofString());
-            } catch (IOException | InterruptedException e) {
-                throw new IOException();
-            }
-
-            jsonObject = new JSONObject(getResponse.body()).getJSONArray("BTC_USD").getJSONObject(0);
+            httpGet = new HttpGet(uri);
+            response = client.execute(httpGet);
+            jsonObject = new JSONObject(EntityUtils.toString(response.getEntity()))
+                    .getJSONArray(currencyPair)
+                    .getJSONObject(0);
             sellOrBuy = jsonObject.get("type").toString();
             price = Double.parseDouble(jsonObject.get("price").toString());
 
@@ -46,10 +59,11 @@ public class TradesPrices {
             } else if (sellOrBuy.equals("sell")) {
                 sellPrice.add(price);
             }
+            System.out.println(sellOrBuy + " - " + price);
         }
     }
 
-    public void exetute() throws IOException {
+    public void exetute() throws IOException, URISyntaxException {
         method();
     }
 

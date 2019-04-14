@@ -52,6 +52,11 @@
             <version>3.5.4</version>
             <type>pom</type>
         </dependency>
+        <dependency>
+            <groupId>biz.source_code</groupId>
+            <artifactId>base64coder</artifactId>
+            <version>2010-12-19</version>
+        </dependency>
     </dependencies>
 
 
