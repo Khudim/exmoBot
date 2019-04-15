@@ -1,6 +1,11 @@
 public class WorkAlgoritm {
 
-    public void start(TradesPrices tradesPrices, OrderBookPrices orderBookPrices) {
+    private Double upperBorder;
+    private Double lowBorder;
+    private Double newUpperBorder;
+    private Double newLowBorder;
+
+    public void start(TradesPrices tradesPrices, OrderBookPrices orderBookPrices, PostRequests postRequests) {
 
         createCorridors(tradesPrices);
 
@@ -24,10 +29,10 @@ public class WorkAlgoritm {
     private void createCorridors(TradesPrices tradesPrices) {
         Double actualPrice = (tradesPrices.getActualBuyPrice()
                 + tradesPrices.getActualSellPrice()) / 2;
-        Double upperBorder = actualPrice * 1.01;
-        Double lowBorder = actualPrice * 0.9900990099;
-        Double newUpperBorder = actualPrice * 1.02;
-        Double newLowBorder = actualPrice * 0.98039215686;
+        upperBorder = actualPrice * 1.01;
+        lowBorder = actualPrice * 0.9900990099;
+        newUpperBorder = actualPrice * 1.02;
+        newLowBorder = actualPrice * 0.98039215686;
     }
 
     private void actionInMainCorridor() {

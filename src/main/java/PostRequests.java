@@ -28,12 +28,9 @@ public class PostRequests {
     private String nonceName = "nonce";
     private HttpClient client = HttpClientBuilder.create().build();
 
-    PostRequests(String currencyPair, String eKey, String secret) {
+    PostRequests(String eKey, String secret) {
         this.eKey = eKey;
         this.secret = secret;
-    }
-
-    PostRequests() {
     }
 
     private String sendPostRequest(String method, String currencyPair, Map<String, String> arguments) {

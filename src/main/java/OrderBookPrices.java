@@ -15,15 +15,11 @@ public class OrderBookPrices {
 
     private ArrayList<Double> askPriceList = new ArrayList<>();
     private ArrayList<Double> bidPriceList = new ArrayList<>();
-    private String method;
     private String currencyPair;
 
-    OrderBookPrices(String method, String currencyPair){
-        this.method = method;
+    OrderBookPrices(String currencyPair){
         this.currencyPair = currencyPair;
     }
-
-    OrderBookPrices(){}
 
     private void method() throws IOException, URISyntaxException {
 
@@ -32,7 +28,7 @@ public class OrderBookPrices {
         URI uri = new URIBuilder()
                 .setScheme("http")
                 .setHost("api.exmo.me")
-                .setPath("/v1/" + method)
+                .setPath("/v1/order_book")
                 .setParameter("pair", currencyPair)
                 .setParameter("limit", "1")
                 .build();

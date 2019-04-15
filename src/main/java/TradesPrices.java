@@ -15,15 +15,11 @@ public class TradesPrices {
 
     private ArrayList<Double> buyPrice = new ArrayList<>();
     private ArrayList<Double> sellPrice = new ArrayList<>();
-    private String method;
     private String currencyPair;
 
-    TradesPrices(String method, String currencyPair){
-        this.method = method;
+    TradesPrices(String currencyPair) {
         this.currencyPair = currencyPair;
     }
-
-    TradesPrices(){}
 
     private void method() throws IOException, URISyntaxException {
 
@@ -36,7 +32,7 @@ public class TradesPrices {
         URI uri = new URIBuilder()
                 .setScheme("http")
                 .setHost("api.exmo.me")
-                .setPath("/v1/" + method)
+                .setPath("/v1/trades")
                 .setParameter("pair", currencyPair)
                 .setParameter("limit", "1")
                 .build();
