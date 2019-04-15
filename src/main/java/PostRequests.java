@@ -1,129 +1,130 @@
 import org.apache.commons.codec.binary.Hex;
 import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.DecompressingEntity;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class PostRequests {
 
-    private String method;
-    private String currencyPair;
     private String eKey;
     private String secret;
+    private String nonceName = "nonce";
+    private HttpClient client = HttpClientBuilder.create().build();
 
-    PostRequests(String method, String currencyPair, String eKey, String secret){
-        this.method = method;
-        this.currencyPair = currencyPair;
+    PostRequests(String currencyPair, String eKey, String secret) {
         this.eKey = eKey;
         this.secret = secret;
     }
 
-    PostRequests(){}
-
-    private void method() throws URISyntaxException, IOException, NoSuchAlgorithmException, InvalidKeyException {
-
-        String nonceName = "nonce";
-        Long nonceNum = System.nanoTime();
-        String postData = nonceName + "=" + ++nonceNum;
-
-        System.out.println(nonceNum);
-
-        HttpClient client = HttpClientBuilder.create().build();
-
-//        URI uri = new URIBuilder()
-//                .setScheme("https")
-//                .setHost("api.exmo.me")
-//                .setPath("/v1/" + method)
-//                .setParameter(nonceName, nonceNum.toString())
-//                .build();
-
-
-
-        String hexString = Long.toHexString(nonceNum);
-        Mac mac512;
-
-        mac512 = Mac.getInstance("HmacSHA512");
-        SecretKeySpec secretKeySpec = new SecretKeySpec(nonceNum.toString().getBytes(), "HmacSHA512");
-        mac512.init(secretKeySpec);
-
-        byte[] mac_data = mac512.doFinal(secret.getBytes("UTF-8"));
-        String sign = Base64.getEncoder().encodeToString(mac_data);
-
-
-
-
-
-
-
-
-
-//        byte[] keyBytes = secret.getBytes();
-//        SecretKeySpec signingKey = new SecretKeySpec(keyBytes, "HmacSHA512");
-//        Mac mac = Mac.getInstance("HmacSHA512");
-//        mac.init(signingKey);
-//
-//        byte[] rawHmac = mac.doFinal(postData.getBytes());
-//        byte[] hexBytes = new Hex().encode(rawHmac);
-//        String sign = new String(hexBytes, "UTF-8");
-
-
-
-
-
-
-
-//        SecretKeySpec key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA512");
-//        Mac mac = Mac.getInstance("HmacSHA512");
-//        mac.init(key);
-//        String sign = Hex.encodeHexString(mac.doFinal(postData.getBytes("UTF-8")));
-
-
-//        String sign;
-//        eKey = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA512");
-//        mac =
-//        mac.init(key);
-//        sign = Hex.encodeHexString(mac.doFinal(("nonce" + System.nanoTime()).getBytes("UTF-8")));
-
-
-        URI uri = new URIBuilder()
-                .setScheme("https")
-                .setHost("api.exmo.me")
-                .setPath("/v1/" + method)
-                .setParameter("Key", "K-cfa9fc252e2f0b57b17786ee119efa10392c6686")
-                .setParameter("Sign", sign)
-                .setParameter(nonceName, nonceNum.toString())
-                .build();
-
-        HttpPost httpPost = new HttpPost(uri);
-
-        httpPost.setHeader("Content-type", "application/x-www-form-urlencoded");
-//        httpPost.setHeader("Key", "K-ffb834e1e4763124b7b6912d4537efd81c44e79f");
-//        httpPost.addHeader("Sign", "S-574448e074467030ebbe502bff02cb5278ab85ee");
-//        httpPost.setHeader("Sign", sign);
-
-
-        System.out.println(httpPost.toString());
-        HttpResponse httpResponse = client.execute(httpPost);
-        String response = EntityUtils.toString(httpResponse.getEntity());
-
-        System.out.println(response);
+    PostRequests() {
     }
 
-    public void execute() throws IOException, URISyntaxException, InvalidKeyException, NoSuchAlgorithmException {
-        method();
+    private String sendPostRequest(String method, String currencyPair, Map<String, String> arguments) {
+
+        if (arguments == null) {
+            arguments = new HashMap<>();
+        }
+
+        String nonceNum = "" + System.nanoTime();
+        arguments.put(nonceName, nonceNum);
+        String postData = "";
+
+        for (Map.Entry<String, String> stringStringEntry : arguments.entrySet()) {
+            Map.Entry argument = stringStringEntry;
+
+            if (postData.length() > 0) {
+                postData += "&";
+            }
+            postData += argument.getKey() + "=" + argument.getValue();
+        }
+
+        SecretKeySpec keySpec;
+
+        try {
+            keySpec = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA512");
+        } catch (UnsupportedEncodingException ee) {
+            System.err.println("Unsupported encoding exception: " + ee.toString());
+            return null;
+        }
+
+        Mac mac;
+        try {
+            mac = Mac.getInstance("HmacSHA512");
+        } catch (NoSuchAlgorithmException ee) {
+            System.err.println("No such algorithm exception: " + ee.toString());
+            return null;
+        }
+
+        try {
+            mac.init(keySpec);
+        } catch (InvalidKeyException ike) {
+            System.err.println("Invalid key exception: " + ike.toString());
+            return null;
+        }
+
+        String sign;
+        try {
+            sign = Hex.encodeHexString(mac.doFinal(postData.getBytes("UTF-8")));
+        } catch (UnsupportedEncodingException uee) {
+            System.err.println("Unsupported encoding exception: " + uee.toString());
+            return null;
+        }
+
+        URI uri;
+        try {
+            uri = new URIBuilder()
+                    .setScheme("https")
+                    .setHost("api.exmo.me")
+                    .setPath("/v1/" + method)
+                    .build();
+        } catch (URISyntaxException ee) {
+            System.err.println("Bad URI request " + ee.toString());
+            return null;
+        }
+
+        HttpPost httpPost = new HttpPost(uri);
+        httpPost.setHeader("Content-type", "application/x-www-form-urlencoded");
+        httpPost.setHeader("Key", eKey);
+        httpPost.setHeader("Sign", sign);
+
+        ArrayList<NameValuePair> postParameters = new ArrayList<>();
+        for (Map.Entry<String, String> param : arguments.entrySet()) {
+            postParameters.add(new BasicNameValuePair(param.getKey(), param.getValue()));
+        }
+
+        try {
+            httpPost.setEntity(new UrlEncodedFormEntity(postParameters, "UTF-8"));
+        } catch (UnsupportedEncodingException ee) {
+            System.err.println("Unsupported encoding exception: " + ee.toString());
+            return null;
+        }
+        HttpResponse httpResponse;
+        String responce;
+        try {
+            httpResponse = client.execute(httpPost);
+            responce = EntityUtils.toString(httpResponse.getEntity());
+        } catch (IOException e) {
+            System.err.println("IOException " + e.toString());
+            return null;
+        }
+
+        return responce;
     }
 }
