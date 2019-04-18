@@ -36,6 +36,7 @@ public class Main {
             e.printStackTrace();
             System.exit(-1);
         }
-        new WorkAlgoritm().start(tradesPrices, orderBookPrices, postRequests);
+        final PostRequests ps = postRequests;
+        pool.submit(() -> new WorkAlgoritm().start(tradesPrices, orderBookPrices, ps));
     }
 }
