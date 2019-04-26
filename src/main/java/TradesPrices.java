@@ -4,17 +4,20 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class TradesPrices {
 
-    private ArrayList<Double> buyPrice = new ArrayList<>();
-    private ArrayList<Double> sellPrice = new ArrayList<>();
+    private volatile List<Double> buyPrice = Collections.synchronizedList(new ArrayList<>());
+    private volatile List<Double> sellPrice = Collections.synchronizedList(new ArrayList<>());
     private String currencyPair;
 
     TradesPrices(String currencyPair) {
@@ -22,23 +25,59 @@ public class TradesPrices {
     }
 
     private void method() throws IOException, URISyntaxException {
-
         HttpClient client = HttpClientBuilder.create().build();
-
-        JSONObject jsonObject;
-        String sellOrBuy;
-        Double price;
 
         URI uri = new URIBuilder()
                 .setScheme("http")
                 .setHost("api.exmo.me")
                 .setPath("/v1/trades")
                 .setParameter("pair", currencyPair)
-                .setParameter("limit", "1")
                 .build();
 
+        getFirstSellAndBuyPrice(client, uri);
+        getActualSellOrBuyPrice(client, uri);
+        return;
+    }
+
+    private void getFirstSellAndBuyPrice(HttpClient client, URI uri) throws IOException {
+        HttpGet httpGet = new HttpGet(uri);
+        HttpResponse response = client.execute(httpGet);
+        JSONArray jsonArray = new JSONObject(EntityUtils.toString(response.getEntity())).getJSONArray(currencyPair);
+        boolean checkFirstSellPrice = false;
+        boolean checkFirstBuyPrice = false;
+        for (int i = 0; i < jsonArray.length(); i++) {
+            String type = jsonArray.getJSONObject(i)
+                    .getJSONObject("type")
+                    .toString();
+            Double price = Double.parseDouble(jsonArray.getJSONObject(i)
+                    .getJSONObject("price")
+                    .toString());
+            if (type.equals("buy")
+                    && !checkFirstBuyPrice) {
+                buyPrice.add(price);
+                checkFirstBuyPrice = true;
+            } else if (type.equals("sell")
+                    && !checkFirstSellPrice) {
+                sellPrice.add(price);
+                checkFirstSellPrice = true;
+            } else if (checkFirstBuyPrice && checkFirstSellPrice) {
+                return;
+            }
+        }
+
+
+    }
+
+    private void getActualSellOrBuyPrice(HttpClient client, URI ur) throws IOException, URISyntaxException {
+        JSONObject jsonObject;
+        String sellOrBuy;
+        Double price;
         HttpGet httpGet;
         HttpResponse response;
+
+        URI uri = new URIBuilder(ur)
+                .setParameter("limit", "1")
+                .build();
 
         while (true) {
 
@@ -55,7 +94,6 @@ public class TradesPrices {
             } else if (sellOrBuy.equals("sell")) {
                 sellPrice.add(price);
             }
-            System.out.println(sellOrBuy + " - " + price);
         }
     }
 
@@ -63,19 +101,19 @@ public class TradesPrices {
         method();
     }
 
-    public ArrayList<Double> getBuyPrice() {
+    public synchronized List<Double> getBuyPrice() {
         return buyPrice;
     }
 
     public Double getActualBuyPrice() {
-        return buyPrice.get(buyPrice.size());
+        return getBuyPrice().get(getBuyPrice().size());
     }
 
-    public ArrayList<Double> getSellPrice() {
+    public synchronized List<Double> getSellPrice() {
         return sellPrice;
     }
 
     public Double getActualSellPrice() {
-        return sellPrice.get(sellPrice.size());
+        return getSellPrice().get(getSellPrice().size());
     }
 }

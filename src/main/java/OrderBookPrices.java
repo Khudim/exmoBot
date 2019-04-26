@@ -10,11 +10,13 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public class OrderBookPrices {
 
-    private ArrayList<Double> askPriceList = new ArrayList<>();
-    private ArrayList<Double> bidPriceList = new ArrayList<>();
+    private List<Double> askPriceList = Collections.synchronizedList(new ArrayList<>());
+    private List<Double> bidPriceList = Collections.synchronizedList(new ArrayList<>());
     private String currencyPair;
 
     OrderBookPrices(String currencyPair){
@@ -62,19 +64,19 @@ public class OrderBookPrices {
         method();
     }
 
-    public ArrayList<Double> getBidPriceList() {
+    public synchronized List<Double> getBidPriceList() {
         return bidPriceList;
     }
 
     public Double getActualBidPrice() {
-        return bidPriceList.get(bidPriceList.size());
+        return getBidPriceList().get(getBidPriceList().size());
     }
 
-    public ArrayList<Double> getAskPriceList() {
+    public synchronized List<Double> getAskPriceList() {
         return askPriceList;
     }
 
     public Double getActualAskPrice() {
-        return askPriceList.get(askPriceList.size());
+        return getAskPriceList().get(getAskPriceList().size());
     }
 }

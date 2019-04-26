@@ -7,7 +7,7 @@ import java.util.concurrent.Executors;
 public class Main {
 
     public static void main(String[] args) {
-        ExecutorService pool = Executors.newFixedThreadPool(3);
+        ExecutorService pool = Executors.newFixedThreadPool(8);
         TradesPrices tradesPrices = new TradesPrices("BTC_USD");
         pool.submit(() -> {
             try {
