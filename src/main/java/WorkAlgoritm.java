@@ -1,3 +1,5 @@
+import org.json.JSONObject;
+
 public class WorkAlgoritm {
 
     private Double upperBorder;
@@ -17,11 +19,11 @@ public class WorkAlgoritm {
             while (!needNewCorridors) {
                 if (tradesPrices.getActualSellPrice() > lowBorder
                         && tradesPrices.getActualBuyPrice() < upperBorder) {
-                    actionInMainCorridor(tradesPrices);
+                    actionInMainCorridor(tradesPrices, postRequests);
                 }
                 if (tradesPrices.getActualSellPrice() < lowBorder
                         && tradesPrices.getActualSellPrice() > newLowBorder) {
-                    needNewCorridors = actionInLowCorridor(tradesPrices);
+                    needNewCorridors = actionInLowCorridor(tradesPrices, postRequests);
                 }
                 if (tradesPrices.getActualBuyPrice() > upperBorder
                         && tradesPrices.getActualBuyPrice() < newUpperBorder) {
@@ -58,8 +60,9 @@ public class WorkAlgoritm {
         System.out.println("Корридор сделали: " + upperBorder + ", " + lowBorder + ", " + newLowBorder + ", " + newUpperBorder);
     }
 
-    private void actionInMainCorridor(TradesPrices tradesPrices) {
+    private void actionInMainCorridor(TradesPrices tradesPrices, PostRequests postRequests) {
         // Проверять ордера даже когда прайс не менятся? Вроде сделал - перерпроверить
+//        Не запутайся с sell, buy и условием pric, перепроверь перед коммитом
         Double prevBuyPrice = null;
         while (true) {
             if (tradesPrices.getActualSellPrice() < lowBorder
@@ -71,51 +74,56 @@ public class WorkAlgoritm {
                 continue;
             }
             if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
-                if (false/*есть открытые ордера*/) {
-                    if (false/*открытый ордер на продажу*/) {
-                        if (false/*открытый ордер пришел из основного коридора*/) {
-                            // отменяю ордер
-                        }
-                    } else if (false/*открытый ордер на покупку*/) {
-                        // отменяю ордер
-                    }
-                }
                 if (false/*есть исполненные ордера на покупку*/) {
                     if (false/*исполненный ордер пришел из нижнего коридора*/) {
                         // выставляю ордер на продажу
                     }
                 }
             } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
-                if (false/*есть открытые ордера*/) {
-                    if (false/*открытый ордер на продажу*/) {
-                        // отменяю ордер
-                    } else if (false/*открытый ордер на покупку*/) {
-                        if (false/*открытый ордер пришел из основного коридора*/) {
-                            // отменяю ордер
-                        }
-                    }
-                }
                 if (false/*есть исполненные ордера на продажу*/) {
                     if (false/*исполненный ордер на продажу пришел из верхнего коридора*/) {
                         // выставляю ордер на покупку
                     }
                 }
             }
-            if (false/*Есть открытый ордер на продажу и он пришел из верхнего корридора*/) {
-                if (false/*открытый ордер не в верху стакана на продажу*/) {
-                    // переставляю ордер
-                }
-            }
-            if (false/*Есть открытый ордер на покупку и он пришел из нижнего корридора*/) {
-                if (false/*открытый ордер не в верху стакана на покупку*/) {
-                    // переставляю ордер
+            if (postRequests.getOpenOrdersNum("BTC_USD") > 0) {
+                for (Object jsonObject : postRequests.getResponse("BTC_USD")) {
+                    String type = ((JSONObject) jsonObject).getJSONObject("type")
+                            .toString();
+                    Double price = Double.parseDouble(((JSONObject) jsonObject).getJSONObject("price")
+                            .toString());
+                    if (type.equals("buy")) {
+                        if (price >= newUpperBorder) {
+                            if (false/*открытый ордер не в верху стакана на продажу*/) {
+                                // переставляю ордер
+                            }
+                        } else {
+                            if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
+                                // отменяю ордер
+                            } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
+                                // отменяю ордер
+                            }
+                        }
+                    } else if (type.equals("sell")) {
+                        if (price < newLowBorder) {
+                            if (false/*открытый ордер не в верху стакана на покупку*/) {
+                                // переставляю ордер
+                            }
+                        } else {
+                            if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
+                                // отменяю ордер
+                            } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
+                                // отменяю ордер
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
 
-    private boolean actionInLowCorridor(TradesPrices tradesPrices) {
+    private boolean actionInLowCorridor(TradesPrices tradesPrices, PostRequests postRequests) {
         // Проверять ордера даже когда прайс не меняется? Вроде сделал - перепроверить
         Double prevSellPrice = null;
         while (true) {

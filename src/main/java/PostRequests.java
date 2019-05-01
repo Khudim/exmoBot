@@ -1,4 +1,5 @@
 import org.apache.commons.codec.binary.Hex;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.HttpClient;
@@ -7,12 +8,12 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
@@ -33,7 +34,7 @@ public class PostRequests {
         this.secret = secret;
     }
 
-    private String sendPostRequest(String method, String currencyPair, Map<String, String> arguments) {
+    private JSONObject sendPostRequest(String method, String currencyPair, Map<String, String> arguments) {
 
         if (arguments == null) {
             arguments = new HashMap<>();
@@ -113,15 +114,44 @@ public class PostRequests {
             return null;
         }
         HttpResponse httpResponse;
-        String responce;
+        HttpEntity httpEntity;
+        InputStream is;
+
         try {
             httpResponse = client.execute(httpPost);
-            responce = EntityUtils.toString(httpResponse.getEntity());
+            httpEntity = httpResponse.getEntity();
+            is = httpEntity.getContent();
         } catch (IOException e) {
             System.err.println("IOException " + e.toString());
             return null;
         }
+        StringBuilder sb = new StringBuilder();
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    is, "iso-8859-1"), 8);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line + "\n");
+            }
+            is.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
 
-        return responce;
+        return new JSONObject(sb.toString());
     }
+
+    JSONArray getResponse(String currencyPair) {
+        Map<String, String> arguments = new HashMap();
+        arguments.put("pair", "BTC_USD");
+        return sendPostRequest("user_open_orders", currencyPair, null).getJSONArray(currencyPair);
+    }
+
+    Integer getOpenOrdersNum(String currencyPair) {
+        return getResponse(currencyPair)
+                .length();
+    }
+
+
 }
