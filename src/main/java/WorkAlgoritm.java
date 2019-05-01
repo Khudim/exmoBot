@@ -5,6 +5,8 @@ public class WorkAlgoritm {
     private Double newUpperBorder;
     private Double newLowBorder;
 //    Sell - это покупка  битков, Buy - это продажа битков
+//    Добавить ограничения по сумме
+//    Подумать о том, чтобы каждый вечер закрывать все открытые ордера????
 
     public void start(TradesPrices tradesPrices, OrderBookPrices orderBookPrices, PostRequests postRequests) {
 
@@ -19,11 +21,11 @@ public class WorkAlgoritm {
                 }
                 if (tradesPrices.getActualSellPrice() < lowBorder
                         && tradesPrices.getActualSellPrice() > newLowBorder) {
-                    needNewCorridors = actionInLowCorridor();
+                    needNewCorridors = actionInLowCorridor(tradesPrices);
                 }
                 if (tradesPrices.getActualBuyPrice() > upperBorder
                         && tradesPrices.getActualBuyPrice() < newUpperBorder) {
-                    needNewCorridors = actionInHighCorridor();
+                    needNewCorridors = actionInHighCorridor(tradesPrices);
                 }
             }
         }
@@ -57,64 +59,74 @@ public class WorkAlgoritm {
     }
 
     private void actionInMainCorridor(TradesPrices tradesPrices) {
+        // Проверять ордера даже когда прайс не менятся? Вроде сделал - перерпроверить
+        Double prevBuyPrice = null;
         while (true) {
             if (tradesPrices.getActualSellPrice() < lowBorder
                     || tradesPrices.getActualBuyPrice() > upperBorder) {
                 return;
             }
-            if (false/*цена падает*/) {
+            if (prevBuyPrice == null) {
+                prevBuyPrice = tradesPrices.getActualBuyPrice();
+                continue;
+            }
+            if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
                 if (false/*есть открытые ордера*/) {
                     if (false/*открытый ордер на продажу*/) {
-                        if (false/*ордер пришел из верхнего коридора*/) {
-                            if (false/*открытый ордер не в верху стакана на продажу*/) {
-                                // переставляю ордер
-                            }
-                        } else if (false/*открытый ордер пришел из основного коридора*/) {
+                        if (false/*открытый ордер пришел из основного коридора*/) {
                             // отменяю ордер
                         }
                     } else if (false/*открытый ордер на покупку*/) {
                         // отменяю ордер
                     }
                 }
-                if (false/*есть исполненные ордера*/) {
-                    if (false/*исполненный ордер на покупку*/) {
-                        if (false/*исполненный ордер пришел из нижнего коридора*/) {
-                            // выставляю ордер на продажу
-                        }
+                if (false/*есть исполненные ордера на покупку*/) {
+                    if (false/*исполненный ордер пришел из нижнего коридора*/) {
+                        // выставляю ордер на продажу
                     }
                 }
-            } else if (false/*цена растет*/) {
+            } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
                 if (false/*есть открытые ордера*/) {
                     if (false/*открытый ордер на продажу*/) {
                         // отменяю ордер
                     } else if (false/*открытый ордер на покупку*/) {
                         if (false/*открытый ордер пришел из основного коридора*/) {
                             // отменяю ордер
-                        } else if (false/*открытый ордер пришел из нижнего коридора*/) {
-                            if (false/*открытый ордер не в верху стакана на покупку*/) {
-                                // переставляю ордер
-                            }
                         }
                     }
                 }
-                if (false/*есть исполненные ордера*/) {
-                    if (false/*исполненные ордера на продажу*/) {
-                        if (false/*исполненный ордер на продажу пришел из нижнего коридора*/) {
-                            // выставляю ордер на покупку
-                        }
+                if (false/*есть исполненные ордера на продажу*/) {
+                    if (false/*исполненный ордер на продажу пришел из верхнего коридора*/) {
+                        // выставляю ордер на покупку
                     }
+                }
+            }
+            if (false/*Есть открытый ордер на продажу и он пришел из верхнего корридора*/) {
+                if (false/*открытый ордер не в верху стакана на продажу*/) {
+                    // переставляю ордер
+                }
+            }
+            if (false/*Есть открытый ордер на покупку и он пришел из нижнего корридора*/) {
+                if (false/*открытый ордер не в верху стакана на покупку*/) {
+                    // переставляю ордер
                 }
             }
         }
     }
 
 
-    private boolean actionInLowCorridor() {
+    private boolean actionInLowCorridor(TradesPrices tradesPrices) {
+        // Проверять ордера даже когда прайс не меняется? Вроде сделал - перепроверить
+        Double prevSellPrice = null;
         while (true) {
-            if (false/*цена вышла через верхнюю границу*/) {
+            if (tradesPrices.getActualSellPrice() > lowBorder) {
                 return false;
             }
-            if (false/*нижняя граница пройдена*/) {
+            if (prevSellPrice == null) {
+                prevSellPrice = tradesPrices.getActualSellPrice();
+                continue;
+            }
+            if (tradesPrices.getActualSellPrice() <= newLowBorder) {
                 if (false/*есть открытые ордера*/) {
                     if (false/*открытый ордер на продажу*/) {
                         if (false/*открытый ордер не в верху стакана на продажу*/) {
@@ -125,44 +137,42 @@ public class WorkAlgoritm {
                     }
                 }
                 // создаю ордер на продажу
-                // создаю новые границы
-            } else if (false/*нижняя граница не пройдена*/) {
-                if (false/*цена падает*/) {
-                    if (false/*есть открытые ордера*/) {
-                        if (false/*это открытый ордер на продажу*/) {
-                            if (false/*открытый ордер не верхний в стакане на продажу*/) {
-                                // переставляю ордер
-                            }
-                        } else if (false/*это ордер на покупку*/) {
-                            // отменяю ордер
-                        }
+                return true;
+            } else if (tradesPrices.getActualSellPrice() > newLowBorder) {
+                if (prevSellPrice > tradesPrices.getActualSellPrice()) {
+                    if (false/*есть открытые ордера на покупку*/) {
+                        // отменяю ордер
                     }
-                } else if (false/*цена растет*/) {
+                } else if (tradesPrices.getActualSellPrice() < newLowBorder) {
                     if (false/*нет открытых ордеров или есть исполненные ордера*/) {
                         // создаю ордер на покупку
                     }
-                    if (false/*есть открытые ордера*/) {
-                        if (false/*открытый ордер на продажу*/) {
-                            // отменяю ордер
-                        } else if (false/*открытый ордер на покупку*/) {
-                            if (false/*ордер в верху стакана на покупку*/) {
-                                // жду
-                            } else if (false/*открытый ордер не в верху стакана на покупку*/) {
-                                // переставляю ордер
-                            }
-                        }
+                    if (false/*есть открытые ордера на продажу*/) {
+                        // отменяю ордер
                     }
+                }
+                if (false/*Есть открытый ордер на продажу и он не верхний в стакане на продажу*/) {
+                    // переставляю ордер
+                }
+                if (false/*Есть открытый ордер на покупку и он не верхний в стакане на покупку*/) {
+                    // переставляю ордер
                 }
             }
         }
     }
 
-    private boolean actionInHighCorridor() {
+    private boolean actionInHighCorridor(TradesPrices tradesPrices) {
+        // Проверять ордера даже когда прайс не меняется, вроде сделал - перерпроверить
+        Double prevBuyPrice = null;
         while (true) {
-            if (false/*цена вышла через нижнюю границу*/) {
+            if (tradesPrices.getActualBuyPrice() < upperBorder) {
                 return false;
             }
-            if (false/*верхняя граница пройдена*/) {
+            if (prevBuyPrice == null) {
+                prevBuyPrice = tradesPrices.getActualBuyPrice();
+                continue;
+            }
+            if (tradesPrices.getActualBuyPrice() >= newUpperBorder) {
                 if (false/*есть открытые ордера*/) {
                     if (false/*открытый ордер на покупку*/) {
                         if (false/*открытый ордер не в верху стакана на продажу*/) {
@@ -173,33 +183,25 @@ public class WorkAlgoritm {
                     }
                 }
                 // создаю ордер на покупку
-                // создаю новые границы
-            } else if (false/*верхняя граница не пройдена*/) {
-                if (false/*цена растет*/) {
-                    if (false/*есть открытые ордера*/) {
-                        if (false/*это открытый ордер на покупку*/) {
-                            if (false/*открытый ордер не верхний в стакане на покупку*/) {
-                                // переставляю ордер
-                            }
-                        } else if (false/*это ордер на продажу*/) {
-                            // отменяю ордер
-                        }
+                return true;
+            } else if (tradesPrices.getActualBuyPrice() < newUpperBorder) {
+                if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
+                    if (false/*есть открытые ордера продажу*/) {
+                        // отменяю ордер
                     }
-                } else if (false/*цена падает*/) {
+                } else if (prevBuyPrice > tradesPrices.getActualBuyPrice()/*цена падает*/) {
                     if (false/*нет открытых ордеров или есть исполненные ордера*/) {
                         // создаю ордер на ппродажу
                     }
-                    if (false/*есть открытые ордера*/) {
-                        if (false/*открытый ордер на покупку*/) {
-                            // отменяю ордер
-                        } else if (false/*открытый ордер на продажу*/) {
-                            if (false/*ордер в верху стакана на продажу*/) {
-                                // жду
-                            } else if (false/*открытый ордер не в верху стакана на продажу*/) {
-                                // переставляю ордер
-                            }
-                        }
+                    if (false/*есть открытые ордера на покупку*/) {
+                        // отменяю ордер
                     }
+                }
+                if (false/*Есть открытый ордер на покупку и он не верхний в стакане на покупку*/) {
+                    // переставляю ордер
+                }
+                if (false/*Есть открытый ордер на продажу и он не верхний в стакане на продажу*/) {
+                    // переставляю ордер
                 }
             }
         }
