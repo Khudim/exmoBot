@@ -4,80 +4,104 @@ public class WorkAlgoritm {
     private Double lowBorder;
     private Double newUpperBorder;
     private Double newLowBorder;
+//    Sell - это покупка  битков, Buy - это продажа битков
 
     public void start(TradesPrices tradesPrices, OrderBookPrices orderBookPrices, PostRequests postRequests) {
 
-        createCorridors(tradesPrices);
-
         while (true) {
-            // создаю коридор
-            // задаю булево значение необходимости нового коридоро
-            while (true/*сюда как раз можно поставить это значение*/){
-                if (false/*цена в основном коридоре*/){
-                    actionInMainCorridor();
+            System.out.println("Ща бум создавать корридор");
+            createCorridors(tradesPrices);
+            boolean needNewCorridors = false;
+            while (!needNewCorridors) {
+                if (tradesPrices.getActualSellPrice() > lowBorder
+                        && tradesPrices.getActualBuyPrice() < upperBorder) {
+                    actionInMainCorridor(tradesPrices);
                 }
-                if (false/*цена в нижнем коридоре*/){
-                    actionInLowCorridor();
+                if (tradesPrices.getActualSellPrice() < lowBorder
+                        && tradesPrices.getActualSellPrice() > newLowBorder) {
+                    needNewCorridors = actionInLowCorridor();
                 }
-                if (false/*цена в верхнем коридоре*/){
-                    actionInHighCorridor();
+                if (tradesPrices.getActualBuyPrice() > upperBorder
+                        && tradesPrices.getActualBuyPrice() < newUpperBorder) {
+                    needNewCorridors = actionInHighCorridor();
                 }
             }
         }
     }
 
     private void createCorridors(TradesPrices tradesPrices) {
-        Double actualPrice = (tradesPrices.getActualBuyPrice()
-                + tradesPrices.getActualSellPrice()) / 2;
+        Double actualPrice;
+        if (upperBorder == null) {
+            synchronized (tradesPrices.getBuyPrice()) {
+                try {
+                    System.out.println("Ща бум блокировать по цене покупки");
+                    tradesPrices.getBuyPrice().wait();
+                    System.out.println("Разбудили");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    System.out.println("interr");
+                }
+            }
+            System.out.println("Считаем");
+            actualPrice = (tradesPrices.getBuyPrice().get(0) + tradesPrices.getSellPrice().get(0)) / 2;
+        } else {
+            actualPrice = (tradesPrices.getActualBuyPrice() + tradesPrices.getActualSellPrice()) / 2;
+        }
         upperBorder = actualPrice * 1.01;
         lowBorder = actualPrice * 0.9900990099;
         newUpperBorder = actualPrice * 1.02;
         newLowBorder = actualPrice * 0.98039215686;
+        // Чтобы протестировать, надо будет сделать вообще мизерный доход, чтобы посмотреть как исполняются ордера
+        // После, в идеале будет торговля на нескольких коинах, в пропертях определять процент и лимит торгов
+        System.out.println("Корридор сделали: " + upperBorder + ", " + lowBorder + ", " + newLowBorder + ", " + newUpperBorder);
     }
 
-    private void actionInMainCorridor() {
-        if (false/*цена вышла за верхнюю или нижнюю границы*/) {
-            return;
-        }
-        if (false/*цена падает*/) {
-            if (false/*есть открытые ордера*/) {
-                if (false/*открытый ордер на продажу*/) {
-                    if (false/*ордер пришел из верхнего коридора*/) {
-                        if (false/*открытый ордер не в верху стакана на продажу*/) {
-                            // переставляю ордер
+    private void actionInMainCorridor(TradesPrices tradesPrices) {
+        while (true) {
+            if (tradesPrices.getActualSellPrice() < lowBorder
+                    || tradesPrices.getActualBuyPrice() > upperBorder) {
+                return;
+            }
+            if (false/*цена падает*/) {
+                if (false/*есть открытые ордера*/) {
+                    if (false/*открытый ордер на продажу*/) {
+                        if (false/*ордер пришел из верхнего коридора*/) {
+                            if (false/*открытый ордер не в верху стакана на продажу*/) {
+                                // переставляю ордер
+                            }
+                        } else if (false/*открытый ордер пришел из основного коридора*/) {
+                            // отменяю ордер
                         }
-                    } else if (false/*открытый ордер пришел из основного коридора*/) {
+                    } else if (false/*открытый ордер на покупку*/) {
                         // отменяю ордер
                     }
-                } else if (false/*открытый ордер на покупку*/) {
-                    // отменяю ордер
                 }
-            }
-            if (false/*есть исполненные ордера*/) {
-                if (false/*исполненный ордер на покупку*/) {
-                    if (false/*исполненный ордер пришел из нижнего коридора*/) {
-                        // выставляю ордер на продажу
-                    }
-                }
-            }
-        } else if (false/*цена растет*/) {
-            if (false/*есть открытые ордера*/) {
-                if (false/*открытый ордер на продажу*/) {
-                    // отменяю ордер
-                } else if (false/*открытый ордер на покупку*/) {
-                    if (false/*открытый ордер пришел из основного коридора*/) {
-                        // отменяю ордер
-                    } else if (false/*открытый ордер пришел из нижнего коридора*/) {
-                        if (false/*открытый ордер не в верху стакана на покупку*/) {
-                            // переставляю ордер
+                if (false/*есть исполненные ордера*/) {
+                    if (false/*исполненный ордер на покупку*/) {
+                        if (false/*исполненный ордер пришел из нижнего коридора*/) {
+                            // выставляю ордер на продажу
                         }
                     }
                 }
-            }
-            if (false/*есть исполненные ордера*/) {
-                if (false/*исполненные ордера на продажу*/) {
-                    if (false/*исполненный ордер на продажу пришел из нижнего коридора*/) {
-                        // выставляю ордер на покупку
+            } else if (false/*цена растет*/) {
+                if (false/*есть открытые ордера*/) {
+                    if (false/*открытый ордер на продажу*/) {
+                        // отменяю ордер
+                    } else if (false/*открытый ордер на покупку*/) {
+                        if (false/*открытый ордер пришел из основного коридора*/) {
+                            // отменяю ордер
+                        } else if (false/*открытый ордер пришел из нижнего коридора*/) {
+                            if (false/*открытый ордер не в верху стакана на покупку*/) {
+                                // переставляю ордер
+                            }
+                        }
+                    }
+                }
+                if (false/*есть исполненные ордера*/) {
+                    if (false/*исполненные ордера на продажу*/) {
+                        if (false/*исполненный ордер на продажу пришел из нижнего коридора*/) {
+                            // выставляю ордер на покупку
+                        }
                     }
                 }
             }
@@ -85,10 +109,10 @@ public class WorkAlgoritm {
     }
 
 
-    private void actionInLowCorridor() {
+    private boolean actionInLowCorridor() {
         while (true) {
             if (false/*цена вышла через верхнюю границу*/) {
-                return;
+                return false;
             }
             if (false/*нижняя граница пройдена*/) {
                 if (false/*есть открытые ордера*/) {
@@ -133,10 +157,10 @@ public class WorkAlgoritm {
         }
     }
 
-    private void actionInHighCorridor() {
-        while (true){
+    private boolean actionInHighCorridor() {
+        while (true) {
             if (false/*цена вышла через нижнюю границу*/) {
-                return;
+                return false;
             }
             if (false/*верхняя граница пройдена*/) {
                 if (false/*есть открытые ордера*/) {

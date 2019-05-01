@@ -24,7 +24,7 @@ public class TradesPrices {
         this.currencyPair = currencyPair;
     }
 
-    private void method() throws IOException, URISyntaxException {
+    private void method() throws IOException, URISyntaxException, InterruptedException {
         HttpClient client = HttpClientBuilder.create().build();
 
         URI uri = new URIBuilder()
@@ -34,12 +34,19 @@ public class TradesPrices {
                 .setParameter("pair", currencyPair)
                 .build();
 
+        System.out.println("Считаем первые прайсы");
         getFirstSellAndBuyPrice(client, uri);
+        System.out.println("Посчитали, ща бум будить");
+        synchronized (buyPrice) {
+            buyPrice.notifyAll();
+        }
+        System.out.println("Разбудили");
         getActualSellOrBuyPrice(client, uri);
         return;
     }
 
-    private void getFirstSellAndBuyPrice(HttpClient client, URI uri) throws IOException {
+    private void getFirstSellAndBuyPrice(HttpClient client, URI uri) throws IOException, InterruptedException {
+        Thread.sleep(3000);
         HttpGet httpGet = new HttpGet(uri);
         HttpResponse response = client.execute(httpGet);
         JSONArray jsonArray = new JSONObject(EntityUtils.toString(response.getEntity())).getJSONArray(currencyPair);
@@ -47,10 +54,10 @@ public class TradesPrices {
         boolean checkFirstBuyPrice = false;
         for (int i = 0; i < jsonArray.length(); i++) {
             String type = jsonArray.getJSONObject(i)
-                    .getJSONObject("type")
+                    .get("type")
                     .toString();
             Double price = Double.parseDouble(jsonArray.getJSONObject(i)
-                    .getJSONObject("price")
+                    .get("price")
                     .toString());
             if (type.equals("buy")
                     && !checkFirstBuyPrice) {
@@ -79,7 +86,9 @@ public class TradesPrices {
                 .setParameter("limit", "1")
                 .build();
 
+        System.out.println("Мы запрашиваем остальные значения");
         while (true) {
+
 
             httpGet = new HttpGet(uri);
             response = client.execute(httpGet);
@@ -90,30 +99,40 @@ public class TradesPrices {
             price = Double.parseDouble(jsonObject.get("price").toString());
 
             if (sellOrBuy.equals("buy")) {
-                buyPrice.add(price);
+                synchronized (buyPrice) {
+                    buyPrice.add(price);
+                }
             } else if (sellOrBuy.equals("sell")) {
-                sellPrice.add(price);
+                synchronized (sellPrice) {
+                    sellPrice.add(price);
+                }
             }
         }
     }
 
-    public void exetute() throws IOException, URISyntaxException {
+    public void exetute() throws IOException, URISyntaxException, InterruptedException {
         method();
     }
 
-    public synchronized List<Double> getBuyPrice() {
+    public List<Double> getBuyPrice() {
         return buyPrice;
     }
 
     public Double getActualBuyPrice() {
-        return getBuyPrice().get(getBuyPrice().size());
+        synchronized (buyPrice) {
+            int index = buyPrice.size();
+            return buyPrice.get(index);
+        }
     }
 
-    public synchronized List<Double> getSellPrice() {
+    public List<Double> getSellPrice() {
         return sellPrice;
     }
 
     public Double getActualSellPrice() {
-        return getSellPrice().get(getSellPrice().size());
+        synchronized (sellPrice) {
+            int index = sellPrice.size();
+            return sellPrice.get(index);
+        }
     }
 }

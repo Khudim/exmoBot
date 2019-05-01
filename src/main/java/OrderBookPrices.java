@@ -39,24 +39,29 @@ public class OrderBookPrices {
         HttpGet httpGet;
         HttpResponse httpResponse;
 
+        System.out.println("Мы запрашиваем цены в стакане");
         while (true) {
 
             httpGet = new HttpGet(uri);
             httpResponse = client.execute(httpGet);
             jsonObject = new JSONObject(EntityUtils.toString(httpResponse.getEntity()))
                     .getJSONObject(currencyPair);
-            askPriceList.add(Double.parseDouble(
-                    jsonObject.getJSONArray("ask")
-                            .getJSONArray(0)
-                            .get(0)
-                            .toString())
-            );
-            bidPriceList.add(Double.parseDouble(
-                    jsonObject.getJSONArray("bid")
-                            .getJSONArray(0)
-                            .get(0)
-                            .toString())
-            );
+            synchronized (askPriceList) {
+                askPriceList.add(Double.parseDouble(
+                        jsonObject.getJSONArray("ask")
+                                .getJSONArray(0)
+                                .get(0)
+                                .toString())
+                );
+            }
+            synchronized (bidPriceList) {
+                bidPriceList.add(Double.parseDouble(
+                        jsonObject.getJSONArray("bid")
+                                .getJSONArray(0)
+                                .get(0)
+                                .toString())
+                );
+            }
         }
     }
 
@@ -64,12 +69,15 @@ public class OrderBookPrices {
         method();
     }
 
-    public synchronized List<Double> getBidPriceList() {
+    public List<Double> getBidPriceList() {
         return bidPriceList;
     }
 
     public Double getActualBidPrice() {
-        return getBidPriceList().get(getBidPriceList().size());
+        synchronized (bidPriceList){
+            int index = bidPriceList.size();
+            return bidPriceList.get(index);
+        }
     }
 
     public synchronized List<Double> getAskPriceList() {
@@ -77,6 +85,9 @@ public class OrderBookPrices {
     }
 
     public Double getActualAskPrice() {
-        return getAskPriceList().get(getAskPriceList().size());
+        synchronized (askPriceList){
+            int index = askPriceList.size();
+            return askPriceList.get(index);
+        }
     }
 }
