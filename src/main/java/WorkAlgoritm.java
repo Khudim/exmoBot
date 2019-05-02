@@ -12,8 +12,10 @@ public class WorkAlgoritm {
     private Double newLowBorder;
     private String historyTradeId = "";
 //    Sell - это покупка  битков, Buy - это продажа битков
-//    Добавить ограничения по сумме
+//    Добавить ограничения по сумме, т.е. запрашивать баланс
 //    Подумать о том, чтобы каждый вечер закрывать все открытые ордера????
+    // НЕ ЗАТУПИ С SELL И BUY
+    // TradePrices, OrderBookPrices, PostRequests сделать глобальными и в конструктор??????
 
     public void start(TradesPrices tradesPrices, OrderBookPrices orderBookPrices, PostRequests postRequests) {
 
@@ -22,17 +24,16 @@ public class WorkAlgoritm {
             createCorridors(tradesPrices);
             boolean needNewCorridors = false;
             while (!needNewCorridors) {
-                if (tradesPrices.getActualSellPrice() > lowBorder
-                        && tradesPrices.getActualBuyPrice() < upperBorder) {
-                    actionInMainCorridor(tradesPrices, postRequests);
+                Double actualSellPrice = tradesPrices.getActualSellPrice();
+                Double actualBuyPrice = tradesPrices.getActualBuyPrice();
+                if (actualSellPrice > lowBorder && actualBuyPrice < upperBorder) {
+                    actionInMainCorridor(tradesPrices, postRequests, orderBookPrices);
                 }
-                if (tradesPrices.getActualSellPrice() < lowBorder
-                        && tradesPrices.getActualSellPrice() > newLowBorder) {
-                    needNewCorridors = actionInLowCorridor(tradesPrices, postRequests);
+                if (actualSellPrice < lowBorder && actualSellPrice > newLowBorder) {
+                    needNewCorridors = actionInLowCorridor(tradesPrices, postRequests, orderBookPrices);
                 }
-                if (tradesPrices.getActualBuyPrice() > upperBorder
-                        && tradesPrices.getActualBuyPrice() < newUpperBorder) {
-                    needNewCorridors = actionInHighCorridor(tradesPrices, postRequests);
+                if (actualBuyPrice > upperBorder && actualBuyPrice < newUpperBorder) {
+                    needNewCorridors = actionInHighCorridor(tradesPrices, postRequests, orderBookPrices);
                 }
             }
         }
@@ -65,21 +66,25 @@ public class WorkAlgoritm {
         System.out.println("Корридор сделали: " + upperBorder + ", " + lowBorder + ", " + newLowBorder + ", " + newUpperBorder);
     }
 
-    private void actionInMainCorridor(TradesPrices tradesPrices, PostRequests postRequests) {
+    private void actionInMainCorridor(TradesPrices tradesPrices, PostRequests postRequests, OrderBookPrices orderBookPrices) {
         // Проверять ордера даже когда прайс не менятся? Вроде сделал - перерпроверить
 //        Не запутайся с sell, buy и условием pric, перепроверь перед коммитом
+        // Может использовать в этом корридоре и buy, и sell price?
         Double prevBuyPrice = null;
         boolean needNewHistoryTradeId = true;
         while (true) {
-            if (tradesPrices.getActualSellPrice() < lowBorder
-                    || tradesPrices.getActualBuyPrice() > upperBorder) {
+            Double actualSellPrice = tradesPrices.getActualSellPrice();
+            Double actualBuyPrice = tradesPrices.getActualBuyPrice();
+            Double upperAskPrice = orderBookPrices.getActualAskPrice();
+            Double upperBidPrice = orderBookPrices.getActualBidPrice();
+            if (actualSellPrice < lowBorder || actualBuyPrice > upperBorder) {
                 return;
             }
             if (prevBuyPrice == null) {
-                prevBuyPrice = tradesPrices.getActualBuyPrice();
+                prevBuyPrice = actualBuyPrice;
                 continue;
             }
-            JSONArray jsonArray = getArgumentsForUserTrades(postRequests);
+            JSONArray jsonArray = getUserTrades(postRequests);
             if (jsonArray.length() > 0) {
                 for (Object jsonObject : jsonArray) {
                     String type = ((JSONObject) jsonObject).getJSONObject("type")
@@ -88,23 +93,23 @@ public class WorkAlgoritm {
                             .toString());
                     String tradeId = ((JSONObject) jsonObject).getJSONObject("trade_id")
                             .toString();
-                    if (tradeId.equals(historyTradeId)){
+                    if (tradeId.equals(historyTradeId)) {
                         break;
                     }
-                    if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
+                    if (prevBuyPrice > actualBuyPrice) {
                         if (type.equals("sell")) {
                             if (price < newLowBorder) {
-                                // выставляю ордер на продажу
+                                createOrder(postRequests, 0.0, 0.0, "sell");
                                 if (needNewHistoryTradeId) {
                                     historyTradeId = tradeId;
                                     needNewHistoryTradeId = false;
                                 }
                             }
                         }
-                    } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
+                    } else if (prevBuyPrice < actualBuyPrice) {
                         if (type.equals("buy")) {
                             if (price > newUpperBorder) {
-                                // выставляю ордер на покупку
+                                createOrder(postRequests, 0.0, 0.0, "buy");
                                 if (needNewHistoryTradeId) {
                                     historyTradeId = tradeId;
                                     needNewHistoryTradeId = false;
@@ -121,28 +126,31 @@ public class WorkAlgoritm {
                             .toString();
                     Double price = Double.parseDouble(((JSONObject) jsonObject).getJSONObject("price")
                             .toString());
+                    String orderId = ((JSONObject) jsonObject).getJSONObject("order_id").toString();
                     if (type.equals("buy")) {
                         if (price >= newUpperBorder) {
-                            if (false/*открытый ордер не в верху стакана на продажу*/) {
-                                // переставляю ордер
+                            if (upperAskPrice < price) {
+                                cancelOrder(postRequests, orderId);
+                                createOrder(postRequests, 0.0, 0.0, "buy");
                             }
                         } else {
-                            if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
-                                // отменяю ордер
-                            } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
-                                // отменяю ордер
+                            if (prevBuyPrice > actualBuyPrice) {
+                                cancelOrder(postRequests, orderId);
+                            } else if (prevBuyPrice < actualBuyPrice) {
+                                cancelOrder(postRequests, orderId);
                             }
                         }
                     } else if (type.equals("sell")) {
                         if (price < newLowBorder) {
-                            if (false/*открытый ордер не в верху стакана на покупку*/) {
-                                // переставляю ордер
+                            if (upperBidPrice > price) {
+                                cancelOrder(postRequests, orderId);
+                                createOrder(postRequests, 0.0, 0.0, "sell");
                             }
                         } else {
-                            if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
-                                // отменяю ордер
-                            } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
-                                // отменяю ордер
+                            if (prevBuyPrice > actualBuyPrice) {
+                                cancelOrder(postRequests, orderId);
+                            } else if (prevBuyPrice < actualBuyPrice) {
+                                cancelOrder(postRequests, orderId);
                             }
                         }
                     }
@@ -152,22 +160,25 @@ public class WorkAlgoritm {
     }
 
 
-    private boolean actionInLowCorridor(TradesPrices tradesPrices, PostRequests postRequests) {
+    private boolean actionInLowCorridor(TradesPrices tradesPrices, PostRequests postRequests, OrderBookPrices orderBookPrices) {
         // Проверять ордера даже когда прайс не меняется? Вроде сделал - перепроверить
         boolean needNewBorders = false;
         Double prevSellPrice = null;
         while (true) {
-            if (tradesPrices.getActualSellPrice() > lowBorder) {
+            Double actualSellPrice = tradesPrices.getActualSellPrice();
+            Double upperAskPrice = orderBookPrices.getActualAskPrice();
+            Double upperBidPrice = orderBookPrices.getActualBidPrice();
+            if (actualSellPrice > lowBorder) {
                 return false;
             }
             if (prevSellPrice == null) {
-                prevSellPrice = tradesPrices.getActualSellPrice();
+                prevSellPrice = actualSellPrice;
                 continue;
             }
             if (postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") == 0
-                    && tradesPrices.getActualSellPrice() > newLowBorder) {
-                if (prevSellPrice < tradesPrices.getActualSellPrice()) {
-                    // создаю ордер на покупку
+                    && actualSellPrice > newLowBorder) {
+                if (prevSellPrice < actualSellPrice) {
+                    createOrder(postRequests, 0.0, 0.0, "buy");
                 }
             }
             if (postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") > 0) {
@@ -175,59 +186,67 @@ public class WorkAlgoritm {
                         null)) {
                     String type = ((JSONObject) jsonObject).getJSONObject("type")
                             .toString();
-                    if (tradesPrices.getActualSellPrice() <= newLowBorder) {
+                    Double price = Double.parseDouble(((JSONObject) jsonObject).getJSONObject("price")
+                            .toString());
+                    String orderId = ((JSONObject) jsonObject).getJSONObject("order_id").toString();
+                    if (actualSellPrice <= newLowBorder) {
                         if (type.equals("buy")) {
-                            if (false/*открытый ордер не верхний в стакане на продажу*/) {
-                                // переставляю ордер
+                            if (upperAskPrice < price) {
+                                cancelOrder(postRequests, orderId);
+                                createOrder(postRequests, 0.0, 0.0, "buy");
                             }
                         } else if (type.equals("sell")) {
-                            // отменяю ордер
+                            cancelOrder(postRequests, orderId);
                         }
                         needNewBorders = true;
-                    } else if (tradesPrices.getActualSellPrice() > newLowBorder) {
-                        if (prevSellPrice > tradesPrices.getActualSellPrice()) {
+                    } else if (actualSellPrice > newLowBorder) {
+                        if (prevSellPrice > actualSellPrice) {
                             if (type.equals("sell")) {
-                                // отменяю ордер
+                                cancelOrder(postRequests, orderId);
                             }
                         }
-                        if (prevSellPrice < tradesPrices.getActualSellPrice()) {
+                        if (prevSellPrice < actualSellPrice) {
                             if (type.equals("buy")) {
-                                // отменяю ордер
+                                cancelOrder(postRequests, orderId);
                             }
                         }
-                        if (type.equals("buy")/*и он не верхний в стакане на продажу*/) {
-                            // переставляю ордер
+                        if (type.equals("buy") && upperAskPrice < price) {
+                            cancelOrder(postRequests, orderId);
+                            createOrder(postRequests, 0.0, 0.0, "buy");
                         }
-                        if (type.equals("sell")/*и он нне верхний в стакане на покупку*/) {
-                            // переставляю ордер
+                        if (type.equals("sell") && upperBidPrice > price) {
+                            cancelOrder(postRequests, orderId);
+                            createOrder(postRequests, 0.0, 0.0, "sell");
                         }
                     }
-
                 }
             }
             if (needNewBorders) {
-                // создаю ордер на продажу
+                createOrder(postRequests, 0.0, 0.0, "sell");
                 return true;
             }
         }
     }
 
-    private boolean actionInHighCorridor(TradesPrices tradesPrices, PostRequests postRequests) {
+    private boolean actionInHighCorridor(TradesPrices tradesPrices, PostRequests postRequests, OrderBookPrices orderBookPrices) {
         // Проверять ордера даже когда прайс не меняется, вроде сделал - перерпроверить
         boolean needNewBorders = false;
         Double prevBuyPrice = null;
         while (true) {
-            if (tradesPrices.getActualBuyPrice() < upperBorder) {
+            Double actualBuyPrice = tradesPrices.getActualBuyPrice();
+            Double upperAskPrice = orderBookPrices.getActualAskPrice();
+            Double upperBidPrice = orderBookPrices.getActualBidPrice();
+            if (actualBuyPrice < upperBorder) {
                 return false;
             }
             if (prevBuyPrice == null) {
-                prevBuyPrice = tradesPrices.getActualBuyPrice();
+                prevBuyPrice = actualBuyPrice;
                 continue;
             }
             if (postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") == 0
-                    && tradesPrices.getActualSellPrice() < newUpperBorder) {
-                if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
-                    // создаю ордер на продажу
+                    && actualBuyPrice < newUpperBorder) {
+                if (prevBuyPrice > actualBuyPrice) {
+                    createOrder(postRequests, 0.0, 0.0, "sell");
                 }
             }
             if (postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") > 0) {
@@ -235,46 +254,67 @@ public class WorkAlgoritm {
                         null)) {
                     String type = ((JSONObject) jsonObject).getJSONObject("type")
                             .toString();
-                    if (tradesPrices.getActualBuyPrice() >= newUpperBorder) {
+                    Double price = Double.parseDouble(((JSONObject) jsonObject).getJSONObject("price")
+                            .toString());
+                    String orderId = ((JSONObject) jsonObject).getJSONObject("order_id").toString();
+                    if (actualBuyPrice >= newUpperBorder) {
                         if (type.equals("sell")) {
-                            if (false/*открытый ордер не в верху стакана на продажу*/) {
-                                // переставляю ордер
+                            if (upperBidPrice > price) {
+                                cancelOrder(postRequests, orderId);
+                                createOrder(postRequests, 0.0, 0.0, "sell");
                             }
                         } else if (type.equals("buy")) {
-                            // отменяю ордер
+                            cancelOrder(postRequests, orderId);
                         }
                         needNewBorders = true;
-                    } else if (tradesPrices.getActualBuyPrice() < newUpperBorder) {
-                        if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
+                    } else if (actualBuyPrice < newUpperBorder) {
+                        if (prevBuyPrice < actualBuyPrice) {
                             if (type.equals("buy")) {
-                                // отменяю ордер
+                                cancelOrder(postRequests, orderId);
                             }
                         }
-                        if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
+                        if (prevBuyPrice > actualBuyPrice) {
                             if (type.equals("sell")) {
-                                // отменяю ордер
+                                cancelOrder(postRequests, orderId);
                             }
                         }
-                        if (type.equals("buy")/*и он не верхний в стакане на продажу*/) {
-                            // перерставляю ордер
+                        if (type.equals("buy") && upperAskPrice < price) {
+                            cancelOrder(postRequests, orderId);
+                            createOrder(postRequests, 0.0, 0.0, "buy");
                         }
-                        if (type.equals("buy"/*и он не верхний в стакане на продажу*/)) {
-                            // перерставляю ордер
+                        if (type.equals("sell") && upperBidPrice > price) {
+                            cancelOrder(postRequests, orderId);
+                            createOrder(postRequests, 0.0, 0.0, "sell");
                         }
                     }
                 }
             }
             if (needNewBorders) {
-                // создаю ордер на покупку
+                createOrder(postRequests, 0.0, 0.0, "buy");
                 return true;
             }
         }
     }
 
-    private JSONArray getArgumentsForUserTrades(PostRequests postRequests) {
+    private JSONArray getUserTrades(PostRequests postRequests) {
         Map<String, String> arguments = new HashMap<>();
         arguments.put("pair", "BTC_USD");
         arguments.put("limit", "50");
         return postRequests.getResponse("user_trades", "BTC_USD", arguments);
+    }
+
+    private JSONArray createOrder(PostRequests postRequests, Double qty, Double price, String type) {
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("pair", "BTC_USD");
+        arguments.put("quantity", qty.toString());
+        arguments.put("price", price.toString());
+        arguments.put("type", type);
+        return postRequests.getResponse("order_create", "BTC_USD", arguments);
+    }
+
+    private JSONArray cancelOrder(PostRequests postRequests, String orderId) {
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("order_id", orderId);
+        return postRequests.getResponse("order_cancel", "BTC_USD", arguments);
     }
 }
