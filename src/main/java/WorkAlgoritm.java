@@ -1,4 +1,8 @@
+import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class WorkAlgoritm {
 
@@ -6,6 +10,7 @@ public class WorkAlgoritm {
     private Double lowBorder;
     private Double newUpperBorder;
     private Double newLowBorder;
+    private String historyTradeId = "";
 //    Sell - это покупка  битков, Buy - это продажа битков
 //    Добавить ограничения по сумме
 //    Подумать о том, чтобы каждый вечер закрывать все открытые ордера????
@@ -64,6 +69,7 @@ public class WorkAlgoritm {
         // Проверять ордера даже когда прайс не менятся? Вроде сделал - перерпроверить
 //        Не запутайся с sell, buy и условием pric, перепроверь перед коммитом
         Double prevBuyPrice = null;
+        boolean needNewHistoryTradeId = true;
         while (true) {
             if (tradesPrices.getActualSellPrice() < lowBorder
                     || tradesPrices.getActualBuyPrice() > upperBorder) {
@@ -73,16 +79,38 @@ public class WorkAlgoritm {
                 prevBuyPrice = tradesPrices.getActualBuyPrice();
                 continue;
             }
-            if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
-                if (false/*есть исполненные ордера на покупку*/) {
-                    if (false/*исполненный ордер пришел из нижнего коридора*/) {
-                        // выставляю ордер на продажу
+            JSONArray jsonArray = getArgumentsForUserTrades(postRequests);
+            if (jsonArray.length() > 0) {
+                for (Object jsonObject : jsonArray) {
+                    String type = ((JSONObject) jsonObject).getJSONObject("type")
+                            .toString();
+                    Double price = Double.parseDouble(((JSONObject) jsonObject).getJSONObject("price")
+                            .toString());
+                    String tradeId = ((JSONObject) jsonObject).getJSONObject("trade_id")
+                            .toString();
+                    if (tradeId.equals(historyTradeId)){
+                        break;
                     }
-                }
-            } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
-                if (false/*есть исполненные ордера на продажу*/) {
-                    if (false/*исполненный ордер на продажу пришел из верхнего коридора*/) {
-                        // выставляю ордер на покупку
+                    if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
+                        if (type.equals("sell")) {
+                            if (price < newLowBorder) {
+                                // выставляю ордер на продажу
+                                if (needNewHistoryTradeId) {
+                                    historyTradeId = tradeId;
+                                    needNewHistoryTradeId = false;
+                                }
+                            }
+                        }
+                    } else if (prevBuyPrice < tradesPrices.getActualBuyPrice()) {
+                        if (type.equals("buy")) {
+                            if (price > newUpperBorder) {
+                                // выставляю ордер на покупку
+                                if (needNewHistoryTradeId) {
+                                    historyTradeId = tradeId;
+                                    needNewHistoryTradeId = false;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -136,7 +164,7 @@ public class WorkAlgoritm {
                 prevSellPrice = tradesPrices.getActualSellPrice();
                 continue;
             }
-            if (/*есть исполненные ордера или * и * */postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") == 0
+            if (postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") == 0
                     && tradesPrices.getActualSellPrice() > newLowBorder) {
                 if (prevSellPrice < tradesPrices.getActualSellPrice()) {
                     // создаю ордер на покупку
@@ -196,7 +224,7 @@ public class WorkAlgoritm {
                 prevBuyPrice = tradesPrices.getActualBuyPrice();
                 continue;
             }
-            if (/*есть исполненные ордера или * и * */postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") == 0
+            if (postRequests.getOpenOrdersNum("user_open_orders", "BTC_USD") == 0
                     && tradesPrices.getActualSellPrice() < newUpperBorder) {
                 if (prevBuyPrice > tradesPrices.getActualBuyPrice()) {
                     // создаю ордер на продажу
@@ -241,5 +269,12 @@ public class WorkAlgoritm {
                 return true;
             }
         }
+    }
+
+    private JSONArray getArgumentsForUserTrades(PostRequests postRequests) {
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("pair", "BTC_USD");
+        arguments.put("limit", "50");
+        return postRequests.getResponse("user_trades", "BTC_USD", arguments);
     }
 }

@@ -142,14 +142,12 @@ public class PostRequests {
         return new JSONObject(sb.toString());
     }
 
-    JSONArray getResponse(String currencyPair) {
-        Map<String, String> arguments = new HashMap();
-        arguments.put("pair", "BTC_USD");
-        return sendPostRequest("user_open_orders", currencyPair, null).getJSONArray(currencyPair);
+    JSONArray getResponse(String method, String currencyPair, Map<String, String> arguments) {
+        return sendPostRequest(method, currencyPair, arguments).getJSONArray(currencyPair);
     }
 
-    Integer getOpenOrdersNum(String currencyPair) {
-        return getResponse(currencyPair)
+    Integer getOpenOrdersNum(String currencyPair, String method) {
+        return getResponse(method, currencyPair, null)
                 .length();
     }
 
