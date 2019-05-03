@@ -39,7 +39,6 @@ public class OrderBookPrices {
         HttpGet httpGet;
         HttpResponse httpResponse;
 
-        System.out.println("Мы запрашиваем цены в стакане");
         while (true) {
 
             httpGet = new HttpGet(uri);
@@ -75,7 +74,7 @@ public class OrderBookPrices {
 
     public Double getActualBidPrice() {
         synchronized (bidPriceList){
-            int index = bidPriceList.size();
+            int index = bidPriceList.size() - 1;
             return bidPriceList.get(index);
         }
     }
@@ -86,7 +85,7 @@ public class OrderBookPrices {
 
     public Double getActualAskPrice() {
         synchronized (askPriceList){
-            int index = askPriceList.size();
+            int index = askPriceList.size() - 1;
             return askPriceList.get(index);
         }
     }

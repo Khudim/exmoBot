@@ -34,13 +34,10 @@ public class TradesPrices {
                 .setParameter("pair", currencyPair)
                 .build();
 
-        System.out.println("Считаем первые прайсы");
         getFirstSellAndBuyPrice(client, uri);
-        System.out.println("Посчитали, ща бум будить");
         synchronized (buyPrice) {
             buyPrice.notifyAll();
         }
-        System.out.println("Разбудили");
         getActualSellOrBuyPrice(client, uri);
         return;
     }
@@ -86,7 +83,6 @@ public class TradesPrices {
                 .setParameter("limit", "1")
                 .build();
 
-        System.out.println("Мы запрашиваем остальные значения");
         while (true) {
 
 
@@ -120,7 +116,7 @@ public class TradesPrices {
 
     public Double getActualBuyPrice() {
         synchronized (buyPrice) {
-            int index = buyPrice.size();
+            int index = buyPrice.size() - 1;
             return buyPrice.get(index);
         }
     }
@@ -131,7 +127,7 @@ public class TradesPrices {
 
     public Double getActualSellPrice() {
         synchronized (sellPrice) {
-            int index = sellPrice.size();
+            int index = sellPrice.size() - 1;
             return sellPrice.get(index);
         }
     }

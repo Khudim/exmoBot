@@ -34,7 +34,7 @@ public class PostRequests {
         this.secret = secret;
     }
 
-    private JSONObject sendPostRequest(String method, String currencyPair, Map<String, String> arguments) {
+    private JSONObject sendPostRequest(String method, Map<String, String> arguments) {
 
         if (arguments == null) {
             arguments = new HashMap<>();
@@ -143,11 +143,15 @@ public class PostRequests {
     }
 
     JSONArray getResponse(String method, String currencyPair, Map<String, String> arguments) {
-        return sendPostRequest(method, currencyPair, arguments).getJSONArray(currencyPair);
+        return sendPostRequest(method, arguments).getJSONArray(currencyPair);
     }
 
-    Integer getOpenOrdersNum(String currencyPair, String method) {
-        return getResponse(method, currencyPair, null)
+    JSONObject getResponse(String method, Map<String, String> arguments) {
+        return sendPostRequest(method, arguments);
+    }
+
+    Integer getOpenOrdersNum(String method) {
+        return getResponse(method, null)
                 .length();
     }
 

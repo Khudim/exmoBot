@@ -1,4 +1,5 @@
 import org.json.JSONArray;
+import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -11,10 +12,13 @@ import java.util.concurrent.Executors;
 
 public class Main {
 //    Отрефачить так, чтобы запускалось несколько потоков по разным парам
+//    Сделать несколько торговых коинов, например, 5
+//    Протестировать создание и отмену ордеров - ок. Теперь с учетом прайсов!
+//    По-хорошему прикрутить пропертя и СУБД
 
     public static void main(String[] args) {
         ExecutorService pool = Executors.newFixedThreadPool(8);
-        TradesPrices tradesPrices = new TradesPrices("BTC_USD");
+        TradesPrices tradesPrices = new TradesPrices("TRX_USD");
         System.out.println("Начинаем запускать потоки");
         pool.submit(() -> {
             try {
@@ -27,7 +31,7 @@ public class Main {
             }
         });
         System.out.println("Запустили TradesPrices");
-        OrderBookPrices orderBookPrices = new OrderBookPrices("BTC_USD");
+        OrderBookPrices orderBookPrices = new OrderBookPrices("TRX_USD");
         pool.submit(() -> {
             try {
                 orderBookPrices.execute();
@@ -49,19 +53,33 @@ public class Main {
         }
         System.out.println("Запустили PostRequests");
         final PostRequests ps = postRequests;
-        pool.submit(() -> new WorkAlgoritm().start(tradesPrices, orderBookPrices, ps));
+        pool.submit(() -> new WorkAlgoritm(tradesPrices, orderBookPrices, ps).start());
         System.out.println("Запустили алгоритм");
     }
 
     @Test
     public void test() {
-        Map<String, String> arguments = new HashMap<>();
-        arguments.put("pair", "BTC_USD");
-        arguments.put("limit", "50");
-        JSONArray jsonArray = new PostRequests(
+        PostRequests postRequests = new PostRequests(
                 "K-cfa9fc252e2f0b57b17786ee119efa10392c6686",
                 "S-1261694bb16beecf19c2eadac2b23ed4711996e3"
-        ).getResponse("user_trades", "BTC_USD", arguments);
-        jsonArray.length();
+        );
+        JSONObject jsonArray = createOrder(postRequests, 1.0, 0.023, "buy");
+        String orderId = jsonArray.get("order_id").toString();
+        cancelOrder(postRequests, orderId);
+    }
+
+    private JSONObject createOrder(PostRequests postRequests, Double qty, Double price, String type) {
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("pair", "TRX_USD");
+        arguments.put("quantity", qty.toString());
+        arguments.put("price", price.toString());
+        arguments.put("type", type);
+        return postRequests.getResponse("order_create", arguments);
+    }
+
+    private JSONObject cancelOrder(PostRequests postRequests, String orderId) {
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("order_id", orderId);
+        return postRequests.getResponse("order_cancel", arguments);
     }
 }
