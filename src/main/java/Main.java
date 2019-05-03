@@ -7,12 +7,24 @@ import java.util.concurrent.Executors;
 public class Main {
 //    Отрефачить так, чтобы запускалось несколько потоков по разным парам
 //    Сделать несколько торговых коинов, например, 5
-//    Протестировать создание и отмену ордеров - ок. Теперь с учетом прайсов!
-//    По-хорошему прикрутить пропертя и СУБД
+//    Протестировать создание и отмену ордеров - ок. Теперь с учетом прайсов! - вроде ок...
+//    По-хорошему прикрутить пропертя (можно yml) и СУБД
+//    Добавить логгер и писать логи в соответствующие файлы логов
+//    Еще нормально обрабатывать Exceptions и тоже писать в отдельный лог
+
+//    А изюминкой, но, на мой взгляд обязательной, стоит из всего этого сделать, наверное, джарник и кинуть на какой-нибудь сервак,
+//    чтобы использовать ноут, не боясь, запороть процесс. Как вариант виртуалку от яндекса
+    
+//    Key and secret to property or yml file
 
     public static void main(String[] args) {
-        ExecutorService pool = Executors.newFixedThreadPool(8);
-        TradesPrices tradesPrices = new TradesPrices("TRX_USD");
+        ExecutorService pool = Executors.newFixedThreadPool(16);
+        initWorkWithCurrencyPair(pool, "TRX_USD", 7, 0.0000001);
+    }
+
+    private static void initWorkWithCurrencyPair(ExecutorService pool, String currencyPair, Integer maxOrdersCount,
+                                                 Double delta) {
+        TradesPrices tradesPrices = new TradesPrices(currencyPair);
         pool.submit(() -> {
             try {
                 tradesPrices.exetute();
@@ -23,7 +35,7 @@ public class Main {
                 e.printStackTrace();
             }
         });
-        OrderBookPrices orderBookPrices = new OrderBookPrices("TRX_USD");
+        OrderBookPrices orderBookPrices = new OrderBookPrices(currencyPair);
         pool.submit(() -> {
             try {
                 orderBookPrices.execute();
@@ -45,7 +57,7 @@ public class Main {
         final PostRequests ps = postRequests;
         pool.submit(() -> {
             try {
-                new WorkAlgoritm(tradesPrices, orderBookPrices, ps, 7).start();
+                new WorkAlgoritm(tradesPrices, orderBookPrices, ps, maxOrdersCount, delta, currencyPair).start();
             } catch (Exception e) {
                 e.printStackTrace();
             }

@@ -2,7 +2,6 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -11,13 +10,17 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-public class TradesPrices {
+import static java.lang.Double.parseDouble;
+import static java.lang.Thread.*;
+import static java.util.Collections.synchronizedList;
+import static org.apache.http.impl.client.HttpClientBuilder.create;
 
-    private final List<Double> buyPrice = Collections.synchronizedList(new ArrayList<>());
-    private final List<Double> sellPrice = Collections.synchronizedList(new ArrayList<>());
+class TradesPrices {
+
+    private final List<Double> buyPrice = synchronizedList(new ArrayList<>());
+    private final List<Double> sellPrice = synchronizedList(new ArrayList<>());
     private String currencyPair;
 
     TradesPrices(String currencyPair) {
@@ -25,7 +28,7 @@ public class TradesPrices {
     }
 
     private void method() throws IOException, URISyntaxException, InterruptedException {
-        HttpClient client = HttpClientBuilder.create().build();
+        HttpClient client = create().build();
 
         URI uri = new URIBuilder()
                 .setScheme("http")
@@ -39,11 +42,10 @@ public class TradesPrices {
             buyPrice.notifyAll();
         }
         getActualSellOrBuyPrice(client, uri);
-        return;
     }
 
     private void getFirstSellAndBuyPrice(HttpClient client, URI uri) throws IOException, InterruptedException {
-        Thread.sleep(3000);
+        sleep(3000);
         HttpGet httpGet = new HttpGet(uri);
         HttpResponse response = client.execute(httpGet);
         JSONArray jsonArray = new JSONObject(EntityUtils.toString(response.getEntity())).getJSONArray(currencyPair);
@@ -53,7 +55,7 @@ public class TradesPrices {
             String type = jsonArray.getJSONObject(i)
                     .get("type")
                     .toString();
-            Double price = Double.parseDouble(jsonArray.getJSONObject(i)
+            Double price = parseDouble(jsonArray.getJSONObject(i)
                     .get("price")
                     .toString());
             if (type.equals("buy")
@@ -89,7 +91,7 @@ public class TradesPrices {
                     .getJSONArray(currencyPair)
                     .getJSONObject(0);
             sellOrBuy = jsonObject.get("type").toString();
-            price = Double.parseDouble(jsonObject.get("price").toString());
+            price = parseDouble(jsonObject.get("price").toString());
 
             if (sellOrBuy.equals("buy")) {
                 synchronized (buyPrice) {

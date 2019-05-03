@@ -1,4 +1,3 @@
-import org.apache.commons.codec.binary.Hex;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
@@ -6,14 +5,16 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
@@ -22,12 +23,17 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-public class PostRequests {
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static javax.crypto.Mac.getInstance;
+import static org.apache.commons.codec.binary.Hex.encodeHexString;
+import static org.apache.http.impl.client.HttpClientBuilder.create;
+
+class PostRequests {
 
     private String eKey;
     private String secret;
-    private String nonceName = "nonce";
-    private HttpClient client = HttpClientBuilder.create().build();
+    private HttpClient client = create().build();
 
     PostRequests(String eKey, String secret) {
         this.eKey = eKey;
@@ -41,30 +47,25 @@ public class PostRequests {
         }
 
         String nonceNum = "" + System.nanoTime();
+        String nonceName = "nonce";
         arguments.put(nonceName, nonceNum);
-        String postData = "";
+        StringBuilder postData = new StringBuilder();
 
         for (Map.Entry<String, String> stringStringEntry : arguments.entrySet()) {
-            Map.Entry argument = stringStringEntry;
 
             if (postData.length() > 0) {
-                postData += "&";
+                postData.append("&");
             }
-            postData += argument.getKey() + "=" + argument.getValue();
+            postData.append(((Map.Entry) stringStringEntry).getKey())
+                    .append("=")
+                    .append(((Map.Entry) stringStringEntry).getValue());
         }
 
-        SecretKeySpec keySpec;
-
-        try {
-            keySpec = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA512");
-        } catch (UnsupportedEncodingException ee) {
-            System.err.println("Unsupported encoding exception: " + ee.toString());
-            return null;
-        }
+        SecretKeySpec keySpec = new SecretKeySpec(secret.getBytes(UTF_8), "HmacSHA512");
 
         Mac mac;
         try {
-            mac = Mac.getInstance("HmacSHA512");
+            mac = getInstance("HmacSHA512");
         } catch (NoSuchAlgorithmException ee) {
             System.err.println("No such algorithm exception: " + ee.toString());
             return null;
@@ -77,13 +78,7 @@ public class PostRequests {
             return null;
         }
 
-        String sign;
-        try {
-            sign = Hex.encodeHexString(mac.doFinal(postData.getBytes("UTF-8")));
-        } catch (UnsupportedEncodingException uee) {
-            System.err.println("Unsupported encoding exception: " + uee.toString());
-            return null;
-        }
+        String sign = encodeHexString(mac.doFinal(postData.toString().getBytes(UTF_8)));
 
         URI uri;
         try {
@@ -107,12 +102,7 @@ public class PostRequests {
             postParameters.add(new BasicNameValuePair(param.getKey(), param.getValue()));
         }
 
-        try {
-            httpPost.setEntity(new UrlEncodedFormEntity(postParameters, "UTF-8"));
-        } catch (UnsupportedEncodingException ee) {
-            System.err.println("Unsupported encoding exception: " + ee.toString());
-            return null;
-        }
+        httpPost.setEntity(new UrlEncodedFormEntity(postParameters, UTF_8));
         HttpResponse httpResponse;
         HttpEntity httpEntity;
         InputStream is;
@@ -127,11 +117,10 @@ public class PostRequests {
         }
         StringBuilder sb = new StringBuilder();
         try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(
-                    is, "iso-8859-1"), 8);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is, ISO_8859_1), 8);
             String line;
             while ((line = reader.readLine()) != null) {
-                sb.append(line + "\n");
+                sb.append(line).append("\n");
             }
             is.close();
         } catch (IOException e) {
@@ -142,16 +131,15 @@ public class PostRequests {
         return new JSONObject(sb.toString());
     }
 
-    JSONArray getResponse(String method, String currencyPair, Map<String, String> arguments) {
-        return sendPostRequest(method, arguments).getJSONArray(currencyPair);
+    JSONArray getUserOpenOrders(String currencyPair) {
+        return sendPostRequest("user_open_orders", null).getJSONArray(currencyPair);
     }
 
-    JSONObject getResponse(String method, Map<String, String> arguments) {
+    JSONObject sendPostRequestAndGetResponse(String method, Map<String, String> arguments) {
         return sendPostRequest(method, arguments);
     }
 
-    Integer getOpenOrdersNum(String method) {
-        return getResponse(method, null)
-                .length();
+    Integer getUserOpenOrdersNum() {
+        return sendPostRequestAndGetResponse("user_open_orders", null).length();
     }
 }
