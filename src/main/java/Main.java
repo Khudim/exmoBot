@@ -1,4 +1,3 @@
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +18,6 @@ public class Main {
     public static void main(String[] args) {
         ExecutorService pool = Executors.newFixedThreadPool(8);
         TradesPrices tradesPrices = new TradesPrices("TRX_USD");
-        System.out.println("Начинаем запускать потоки");
         pool.submit(() -> {
             try {
                 tradesPrices.exetute();
@@ -30,7 +28,6 @@ public class Main {
                 e.printStackTrace();
             }
         });
-        System.out.println("Запустили TradesPrices");
         OrderBookPrices orderBookPrices = new OrderBookPrices("TRX_USD");
         pool.submit(() -> {
             try {
@@ -40,7 +37,6 @@ public class Main {
                 System.exit(-1);
             }
         });
-        System.out.println("Запустили OrderBookPrices");
         PostRequests postRequests = null;
         try {
             postRequests = pool.submit(() -> new PostRequests(
@@ -51,10 +47,14 @@ public class Main {
             e.printStackTrace();
             System.exit(-1);
         }
-        System.out.println("Запустили PostRequests");
         final PostRequests ps = postRequests;
-        pool.submit(() -> new WorkAlgoritm(tradesPrices, orderBookPrices, ps).start());
-        System.out.println("Запустили алгоритм");
+        pool.submit(() -> {
+            try {
+                new WorkAlgoritm(tradesPrices, orderBookPrices, ps, 7).start();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     @Test
