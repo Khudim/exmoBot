@@ -2,7 +2,6 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 
@@ -10,22 +9,25 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+
+import static java.lang.Double.parseDouble;
+import static java.util.Collections.synchronizedList;
+import static org.apache.http.impl.client.HttpClientBuilder.create;
 
 public class OrderBookPrices {
 
-    private final List<Double> askPriceList = Collections.synchronizedList(new ArrayList<>());
-    private final List<Double> bidPriceList = Collections.synchronizedList(new ArrayList<>());
+    private final List<Double> askPriceList = synchronizedList(new ArrayList<>());
+    private final List<Double> bidPriceList = synchronizedList(new ArrayList<>());
     private String currencyPair;
 
-    OrderBookPrices(String currencyPair){
+    OrderBookPrices(String currencyPair) {
         this.currencyPair = currencyPair;
     }
 
     private void method() throws IOException, URISyntaxException {
 
-        HttpClient client = HttpClientBuilder.create().build();
+        HttpClient client = create().build();
 
         URI uri = new URIBuilder()
                 .setScheme("http")
@@ -47,16 +49,14 @@ public class OrderBookPrices {
             httpResponse = client.execute(httpGet);
             jsonObject = new JSONObject(EntityUtils.toString(httpResponse.getEntity()))
                     .getJSONObject(currencyPair);
-            askPrice = Double.parseDouble(
-                    jsonObject.getJSONArray("ask")
-                            .getJSONArray(0)
-                            .get(0)
-                            .toString());
-            bidPrice = Double.parseDouble(
-                    jsonObject.getJSONArray("bid")
-                            .getJSONArray(0)
-                            .get(0)
-                            .toString());
+            askPrice = parseDouble(jsonObject.getJSONArray("ask")
+                    .getJSONArray(0)
+                    .get(0)
+                    .toString());
+            bidPrice = parseDouble(jsonObject.getJSONArray("bid")
+                    .getJSONArray(0)
+                    .get(0)
+                    .toString());
             synchronized (askPriceList) {
                 if (askPriceList.size() == 0
                         || !askPrice.equals(getActualAskPrice())) {
@@ -72,7 +72,7 @@ public class OrderBookPrices {
         }
     }
 
-    public void execute() throws IOException, URISyntaxException {
+    void execute() throws IOException, URISyntaxException {
         method();
     }
 
@@ -80,8 +80,8 @@ public class OrderBookPrices {
         return bidPriceList;
     }
 
-    public Double getActualBidPrice() {
-        synchronized (bidPriceList){
+    Double getActualBidPrice() {
+        synchronized (bidPriceList) {
             int index = bidPriceList.size() - 1;
             return bidPriceList.get(index);
         }
@@ -91,8 +91,8 @@ public class OrderBookPrices {
         return askPriceList;
     }
 
-    public Double getActualAskPrice() {
-        synchronized (askPriceList){
+    Double getActualAskPrice() {
+        synchronized (askPriceList) {
             int index = askPriceList.size() - 1;
             return askPriceList.get(index);
         }
