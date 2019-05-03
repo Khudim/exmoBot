@@ -16,8 +16,8 @@ import java.util.List;
 
 public class TradesPrices {
 
-    private volatile List<Double> buyPrice = Collections.synchronizedList(new ArrayList<>());
-    private volatile List<Double> sellPrice = Collections.synchronizedList(new ArrayList<>());
+    private final List<Double> buyPrice = Collections.synchronizedList(new ArrayList<>());
+    private final List<Double> sellPrice = Collections.synchronizedList(new ArrayList<>());
     private String currencyPair;
 
     TradesPrices(String currencyPair) {
@@ -68,8 +68,6 @@ public class TradesPrices {
                 return;
             }
         }
-
-
     }
 
     private void getActualSellOrBuyPrice(HttpClient client, URI ur) throws IOException, URISyntaxException {
@@ -85,7 +83,6 @@ public class TradesPrices {
 
         while (true) {
 
-
             httpGet = new HttpGet(uri);
             response = client.execute(httpGet);
             jsonObject = new JSONObject(EntityUtils.toString(response.getEntity()))
@@ -96,36 +93,40 @@ public class TradesPrices {
 
             if (sellOrBuy.equals("buy")) {
                 synchronized (buyPrice) {
-                    buyPrice.add(price);
+                    if (!price.equals(getActualBuyPrice())) {
+                        buyPrice.add(price);
+                    }
                 }
             } else if (sellOrBuy.equals("sell")) {
                 synchronized (sellPrice) {
-                    sellPrice.add(price);
+                    if (!price.equals(getActualSellPrice())) {
+                        sellPrice.add(price);
+                    }
                 }
             }
         }
     }
 
-    public void exetute() throws IOException, URISyntaxException, InterruptedException {
+    void exetute() throws IOException, URISyntaxException, InterruptedException {
         method();
     }
 
-    public List<Double> getBuyPrice() {
+    List<Double> getBuyPrice() {
         return buyPrice;
     }
 
-    public Double getActualBuyPrice() {
+    Double getActualBuyPrice() {
         synchronized (buyPrice) {
             int index = buyPrice.size() - 1;
             return buyPrice.get(index);
         }
     }
 
-    public List<Double> getSellPrice() {
+    List<Double> getSellPrice() {
         return sellPrice;
     }
 
-    public Double getActualSellPrice() {
+    Double getActualSellPrice() {
         synchronized (sellPrice) {
             int index = sellPrice.size() - 1;
             return sellPrice.get(index);

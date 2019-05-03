@@ -154,6 +154,4 @@ public class PostRequests {
         return getResponse(method, null)
                 .length();
     }
-
-
 }

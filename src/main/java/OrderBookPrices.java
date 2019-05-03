@@ -15,8 +15,8 @@ import java.util.List;
 
 public class OrderBookPrices {
 
-    private List<Double> askPriceList = Collections.synchronizedList(new ArrayList<>());
-    private List<Double> bidPriceList = Collections.synchronizedList(new ArrayList<>());
+    private final List<Double> askPriceList = Collections.synchronizedList(new ArrayList<>());
+    private final List<Double> bidPriceList = Collections.synchronizedList(new ArrayList<>());
     private String currencyPair;
 
     OrderBookPrices(String currencyPair){
@@ -38,6 +38,8 @@ public class OrderBookPrices {
         JSONObject jsonObject;
         HttpGet httpGet;
         HttpResponse httpResponse;
+        Double askPrice;
+        Double bidPrice;
 
         while (true) {
 
@@ -45,21 +47,27 @@ public class OrderBookPrices {
             httpResponse = client.execute(httpGet);
             jsonObject = new JSONObject(EntityUtils.toString(httpResponse.getEntity()))
                     .getJSONObject(currencyPair);
+            askPrice = Double.parseDouble(
+                    jsonObject.getJSONArray("ask")
+                            .getJSONArray(0)
+                            .get(0)
+                            .toString());
+            bidPrice = Double.parseDouble(
+                    jsonObject.getJSONArray("bid")
+                            .getJSONArray(0)
+                            .get(0)
+                            .toString());
             synchronized (askPriceList) {
-                askPriceList.add(Double.parseDouble(
-                        jsonObject.getJSONArray("ask")
-                                .getJSONArray(0)
-                                .get(0)
-                                .toString())
-                );
+                if (askPriceList.size() == 0
+                        || !askPrice.equals(getActualAskPrice())) {
+                    askPriceList.add(askPrice);
+                }
             }
             synchronized (bidPriceList) {
-                bidPriceList.add(Double.parseDouble(
-                        jsonObject.getJSONArray("bid")
-                                .getJSONArray(0)
-                                .get(0)
-                                .toString())
-                );
+                if (bidPriceList.size() == 0
+                        || !bidPrice.equals(getActualBidPrice())) {
+                    bidPriceList.add(bidPrice);
+                }
             }
         }
     }

@@ -1,4 +1,3 @@
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.HashMap;
@@ -72,14 +71,19 @@ class WorkAlgoritm {
     }
 
     private void actionInMainCorridor() throws Exception {
+        int count = 0;
         Double prevBuyPrice = null;
         Double prevSellPrice = null;
+        Double actualSellPrice;
+        Double actualBuyPrice;
+        Double upperAskPrice;
+        Double upperBidPrice;
         while (true) {
             System.out.println();
-            Double actualSellPrice = tradesPrices.getActualSellPrice();
-            Double actualBuyPrice = tradesPrices.getActualBuyPrice();
-            Double upperAskPrice = orderBookPrices.getActualAskPrice();
-            Double upperBidPrice = orderBookPrices.getActualBidPrice();
+            actualSellPrice = tradesPrices.getActualSellPrice();
+            actualBuyPrice = tradesPrices.getActualBuyPrice();
+            upperAskPrice = orderBookPrices.getActualAskPrice();
+            upperBidPrice = orderBookPrices.getActualBidPrice();
             System.out.println("in main corridor buy price - " + actualBuyPrice);
             System.out.println("in main corridor sell price - " + actualSellPrice);
             System.out.println("in main corridor upper ask price - " + upperAskPrice);
@@ -93,49 +97,52 @@ class WorkAlgoritm {
                 continue;
             }
             if (postRequests.getOpenOrdersNum("user_open_orders") > 0) {
+                Map<String, String> parameters;
+                Double price;
                 for (Object jsonObject : postRequests.getResponse("user_open_orders", "TRX_USD",
                         null)) {
-                    String type = ((JSONObject) jsonObject).get("type")
-                            .toString();
-                    Double price = Double.parseDouble(((JSONObject) jsonObject).get("price")
-                            .toString());
-                    String orderId = ((JSONObject) jsonObject).get("order_id").toString();
+                    parameters = getJsonValues(jsonObject);
+                    price = Double.parseDouble(parameters.get("price"));
+                    String type = parameters.get("type");
                     if (price < upperBorder) {
                         if (type.equals("sell")) {
                             if (prevSellPrice >= actualSellPrice && upperAskPrice > price) {
-                                cancelOrder(orderId, type);
-                                createOrder(1.0, upperAskPrice + 0.0000001, "sell", "TRX_USD");
+                                replaceOrderOnTopOfGlass(parameters, upperAskPrice);
                             } else if (prevSellPrice < actualSellPrice) {
-                                cancelOrder(orderId, type);
+                                cancelOrder(parameters);
                             }
                         }
                     } else if (price > lowBorder) {
                         if (type.equals("buy")) {
                             if (prevBuyPrice <= actualBuyPrice && upperBidPrice > price) {
-                                cancelOrder(orderId, type);
-                                createOrder(1.0, upperBidPrice + 0.0000001, "buy", "TRX_USD");
+                                replaceOrderOnTopOfGlass(parameters, upperBidPrice);
                             } else if (prevBuyPrice > actualBuyPrice) {
-                                cancelOrder(orderId, type);
+                                cancelOrder(parameters);
                             }
                         }
                     } else {
-                        cancelOrder(orderId, type);
+                        cancelOrder(parameters);
                     }
                 }
             }
             prevBuyPrice = actualBuyPrice;
             prevSellPrice = actualSellPrice;
+            System.out.println("Крутим main корридор - " + count);
+            count++;
         }
     }
 
 
     private boolean actionInLowCorridor() throws Exception {
-        // Проверять ордера даже когда прайс не меняется? Вроде сделал - перепроверить
+        int count = 0;
         Double prevBuyPrice = null;
+        Double actualBuyPrice;
+        Double upperAskPrice;
+        Double upperBidPrice;
         while (true) {
-            Double actualBuyPrice = tradesPrices.getActualBuyPrice();
-            Double upperAskPrice = orderBookPrices.getActualAskPrice();
-            Double upperBidPrice = orderBookPrices.getActualBidPrice();
+            actualBuyPrice = tradesPrices.getActualBuyPrice();
+            upperAskPrice = orderBookPrices.getActualAskPrice();
+            upperBidPrice = orderBookPrices.getActualBidPrice();
             System.out.println("in low corridor sell price - " + actualBuyPrice);
             System.out.println("in low corridor upper ask price - " + upperAskPrice);
             System.out.println("in low corridor upper bid price - " + upperBidPrice);
@@ -151,21 +158,18 @@ class WorkAlgoritm {
                 createOrder(1.0, upperBidPrice + 0.0000001, "buy", "TRX_USD");
             }
             if (postRequests.getOpenOrdersNum("user_open_orders") > 0) {
+                Map<String, String> parameters;
+                Double price;
                 for (Object jsonObject : postRequests.getResponse("user_open_orders", "TRX_USD",
                         null)) {
-                    String type = ((JSONObject) jsonObject).get("type")
-                            .toString();
-                    Double price = Double.parseDouble(((JSONObject) jsonObject).get("price")
-                            .toString());
-                    String orderId = ((JSONObject) jsonObject).get("order_id").toString();
+                    parameters = getJsonValues(jsonObject);
+                    price = Double.parseDouble(parameters.get("price"));
                     if (price < upperBorder && price < upperAskPrice) {
-                        cancelOrder(orderId, type);
-                        createOrder(1.0, upperAskPrice + 0.0000001, "sell", "TRX_USD");
+                        replaceOrderOnTopOfGlass(parameters, upperAskPrice);
                     } else if (actualBuyPrice >= prevBuyPrice && price < upperBidPrice) {
-                        cancelOrder(orderId, type);
-                        createOrder(1.0, upperBidPrice + 0.0000001, "buy", "TRX_USD");
+                        replaceOrderOnTopOfGlass(parameters, upperBidPrice);
                     } else if (actualBuyPrice < prevBuyPrice) {
-                        cancelOrder(orderId, type);
+                        cancelOrder(parameters);
                     }
 
                 }
@@ -177,17 +181,21 @@ class WorkAlgoritm {
                 return true;
             }
             prevBuyPrice = actualBuyPrice;
+            System.out.println("Крутим нижний корридор - " + count);
+            count++;
         }
     }
 
     private boolean actionInHighCorridor() throws Exception {
-        // Проверять ордера даже когда прайс не меняется, вроде сделал - перерпроверить
-        boolean needNewBorders = false;
+        int count = 0;
         Double prevSellPrice = null;
+        Double actualSellPrice;
+        Double upperAskPrice;
+        Double upperBidPrice;
         while (true) {
-            Double actualSellPrice = tradesPrices.getActualSellPrice();
-            Double upperAskPrice = orderBookPrices.getActualAskPrice();
-            Double upperBidPrice = orderBookPrices.getActualBidPrice();
+            actualSellPrice = tradesPrices.getActualSellPrice();
+            upperAskPrice = orderBookPrices.getActualAskPrice();
+            upperBidPrice = orderBookPrices.getActualBidPrice();
             System.out.println("in high corridor buy price - " + actualSellPrice);
             System.out.println("in high corridor upper ask price - " + upperAskPrice);
             System.out.println("in high corridor upper bid price - " + upperBidPrice);
@@ -203,39 +211,31 @@ class WorkAlgoritm {
                 createOrder(1.0, upperAskPrice + 0.0000001, "sell", "TRX_USD");
             }
             if (postRequests.getOpenOrdersNum("user_open_orders") > 0) {
+                Map<String, String> parameters;
+                Double price;
                 for (Object jsonObject : postRequests.getResponse("user_open_orders", "TRX_USD",
                         null)) {
-                    String type = ((JSONObject) jsonObject).get("type")
-                            .toString();
-                    Double price = Double.parseDouble(((JSONObject) jsonObject).get("price")
-                            .toString());
-                    String orderId = ((JSONObject) jsonObject).get("order_id").toString();
+                    parameters = getJsonValues(jsonObject);
+                    price = Double.parseDouble(parameters.get("price"));
                     if (price > lowBorder && price < upperBidPrice) {
-                        cancelOrder(orderId, type);
-                        createOrder(1.0, upperBidPrice + 0.0000001, "buy", "TRX_USD");
+                        replaceOrderOnTopOfGlass(parameters, upperBidPrice);
                     } else if (actualSellPrice <= prevSellPrice && price < upperAskPrice) {
-                        cancelOrder(orderId, type);
-                        createOrder(1.0, upperAskPrice + 0.0000001, "sell", "TRX_USD");
+                        replaceOrderOnTopOfGlass(parameters, upperAskPrice);
                     } else if (actualSellPrice > prevSellPrice) {
-                        cancelOrder(orderId, type);
+                        cancelOrder(parameters);
                     }
                 }
             }
-            if (actualSellPrice > newUpperBorder){
+            if (actualSellPrice > newUpperBorder) {
                 if (ordersCount < maxOrdersCount) {
                     createOrder(1.0, upperBidPrice + 0.0000001, "buy", "TRX_USD");
                 }
                 return true;
             }
             prevSellPrice = actualSellPrice;
+            System.out.println("Крутим верхний корридор - " + count);
+            count++;
         }
-    }
-
-    private JSONArray getUserTrades(String currencyPair) {
-        Map<String, String> arguments = new HashMap<>();
-        arguments.put("pair", currencyPair);
-        arguments.put("limit", "50");
-        return postRequests.getResponse("user_trades", currencyPair, arguments);
     }
 
     private JSONObject createOrder(Double qty, Double price, String type, String currencyPair) throws Exception {
@@ -254,9 +254,23 @@ class WorkAlgoritm {
         return postRequests.getResponse("order_create", arguments);
     }
 
-    private JSONObject cancelOrder(String orderId, String type) throws Exception {
+    private Map<String, String> getJsonValues(Object jsonObject) {
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put("type", ((JSONObject) jsonObject).get("type").toString());
+        parameters.put("price", ((JSONObject) jsonObject).get("price").toString());
+        parameters.put("orderId", ((JSONObject) jsonObject).get("order_id").toString());
+        return parameters;
+    }
+
+    private void replaceOrderOnTopOfGlass(Map <String, String> parameters, Double price) throws Exception {
+        cancelOrder(parameters);
+        createOrder(1.0, price + 0.0000001, parameters.get("type"), "TRX_USD");
+    }
+
+    private JSONObject cancelOrder(Map<String, String> parameters) throws Exception {
         Map<String, String> arguments = new HashMap<>();
-        arguments.put("order_id", orderId);
+        arguments.put("order_id", parameters.get("orderId"));
+        String type = parameters.get("type");
         if (type.equals("buy")) {
             ordersCount--;
         } else if (type.equals("sell")) {
