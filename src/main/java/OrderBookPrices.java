@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static java.lang.Double.parseDouble;
+import static java.lang.Thread.sleep;
 import static java.util.Collections.synchronizedList;
 import static org.apache.http.impl.client.HttpClientBuilder.create;
 
@@ -25,7 +26,7 @@ public class OrderBookPrices {
         this.currencyPair = currencyPair;
     }
 
-    private void method() throws IOException, URISyntaxException {
+    private void method() throws IOException, URISyntaxException, InterruptedException {
 
         HttpClient client = create().build();
 
@@ -42,6 +43,7 @@ public class OrderBookPrices {
         HttpResponse httpResponse;
         Double askPrice;
         Double bidPrice;
+        boolean threadsWait = true;
 
         while (true) {
 
@@ -69,10 +71,17 @@ public class OrderBookPrices {
                     bidPriceList.add(bidPrice);
                 }
             }
+            sleep(5000);
+            if (threadsWait){
+                synchronized (askPriceList){
+                    askPriceList.notifyAll();
+                }
+                threadsWait = false;
+            }
         }
     }
 
-    void execute() throws IOException, URISyntaxException {
+    void execute() throws IOException, URISyntaxException, InterruptedException {
         method();
     }
 

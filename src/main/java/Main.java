@@ -1,29 +1,59 @@
+import org.yaml.snakeyaml.Yaml;
+
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static java.lang.Thread.sleep;
+import static org.apache.logging.log4j.core.util.Loader.getClassLoader;
+
 public class Main {
-//    Отрефачить так, чтобы запускалось несколько потоков по разным парам
-//    Сделать несколько торговых коинов, например, 5
-//    Протестировать создание и отмену ордеров - ок. Теперь с учетом прайсов! - вроде ок...
-//    По-хорошему прикрутить пропертя (можно yml) и СУБД
-//    Добавить логгер и писать логи в соответствующие файлы логов
+//    Сделать несколько торговых коинов, например, 5 : проблема ограничения количества запросов в минуту. надо подумать оптимальное количество пар и запросов
+//    Добавить логгер и писать логи в соответствующие файлы логов : посмотреть, может можно сделать читаемее
 //    Еще нормально обрабатывать Exceptions и тоже писать в отдельный лог
+//    А изюминкой, но, на мой взгляд обязательной, стоит из всего этого сделать, наверное, джарник и кинуть на какой-нибудь сервак, \
+//    \ чтобы использовать ноут, не боясь, запороть процесс. Как вариант виртуалку от яндекса
+//    от субд еще не отказался
 
-//    А изюминкой, но, на мой взгляд обязательной, стоит из всего этого сделать, наверное, джарник и кинуть на какой-нибудь сервак,
-//    чтобы использовать ноут, не боясь, запороть процесс. Как вариант виртуалку от яндекса
-
-//    Key and secret to property or yml file
-
-    public static void main(String[] args) {
-        ExecutorService pool = Executors.newFixedThreadPool(16);
-        initWorkWithCurrencyPair(pool, "TRX_USD", 7, 0.0000001);
+    public static void main(String[] args) throws InterruptedException {
+        LinkedHashMap cp = null;
+        try {
+            cp = getPairArgumentsMap();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        Integer pairsCount = cp.entrySet().size();
+        Map<String, String> filePattern = (Map<String, String>) cp.get("file_pattern");
+        ExecutorService pool  = Executors.newFixedThreadPool(pairsCount);
+        for (Object pair: cp.entrySet()) {
+            String currencyPair = ((Map.Entry<String, HashMap<String, Double>>) pair).getKey();
+            if (currencyPair.equals("file_pattern")){
+                break;
+            }
+            Map<String, Double> arguments = ((Map.Entry<String, HashMap<String, Double>>) pair).getValue();
+            pool.submit(() -> initWorkWithCurrencyPair(currencyPair, arguments.get("qty"), arguments.get("max_orders_count"),
+                    arguments.get("delta"), arguments.get("persent"), filePattern.get("file_pattern_" + currencyPair)));
+            sleep(5000);
+        }
     }
 
-    private static void initWorkWithCurrencyPair(ExecutorService pool, String currencyPair, Integer maxOrdersCount,
-                                                 Double delta) {
+    private static LinkedHashMap getPairArgumentsMap() throws IOException {
+        Yaml yaml = new Yaml();
+        InputStream is = getClassLoader().getResourceAsStream("pairs_parameters.yml");
+        LinkedHashMap cp = yaml.load(is);
+        is.close();
+        return cp;
+    }
+
+    private static void initWorkWithCurrencyPair(String currencyPair, Double qty, Double maxOrdersCount, Double delta,
+                                                 Double persent, String filePattern) {
+        ExecutorService pool = Executors.newFixedThreadPool(4);
         TradesPrices tradesPrices = new TradesPrices(currencyPair);
         pool.submit(() -> {
             try {
@@ -42,6 +72,8 @@ public class Main {
             } catch (URISyntaxException | IOException e) {
                 e.printStackTrace();
                 System.exit(-1);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         });
         PostRequests postRequests = null;
@@ -57,7 +89,8 @@ public class Main {
         final PostRequests ps = postRequests;
         pool.submit(() -> {
             try {
-                new WorkAlgoritm(tradesPrices, orderBookPrices, ps, maxOrdersCount, delta, currencyPair).start();
+                new WorkAlgoritm(tradesPrices, orderBookPrices, ps, maxOrdersCount, delta, currencyPair, persent, qty, filePattern)
+                        .start();
             } catch (Exception e) {
                 e.printStackTrace();
             }

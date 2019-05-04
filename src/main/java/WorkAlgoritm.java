@@ -1,16 +1,21 @@
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.FileHandler;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 import static java.lang.Double.parseDouble;
+import static java.lang.Thread.sleep;
 
 class WorkAlgoritm {
 
     private TradesPrices tradesPrices;
     private OrderBookPrices orderBookPrices;
     private PostRequests postRequests;
-    private Integer maxOrdersCount;
+    private Double maxOrdersCount;
     private Double orderPriceDelta;
     private String currencyPair;
 
@@ -18,23 +23,29 @@ class WorkAlgoritm {
     private Double lowerBorder;
     private Double uppestBorder;
     private Double lowestBorder;
+
+    private Double persent;
+    private Double qty;
+
     private Integer sellOrdersCount = 0;
     private Integer buyOrdersCount = 0;
-//    Sell - это покупка  битков, Buy - это продажа битков
-//    НЕ ЗАТУПИ С SELL И BUY
-//    После, в идеале будет торговля на нескольких коинах, в пропертях определять процент и лимит торгов - вроде решил, еще на свежую голову посмотреть
-//    Подумать о том, чтобы каж дый вечер закрывать все открытые ордера???? - думаю нет
 
-//    in parameters: border persent?, qty!
+    private Double lastOrderPrice = 0.0;
+
+    private Logger logger;
 
     WorkAlgoritm(TradesPrices tradesPrices, OrderBookPrices orderBookPrices, PostRequests postRequests,
-                 Integer maxOrdersCount, Double orderPriceDelta, String currencyPair) {
+                 Double maxOrdersCount, Double orderPriceDelta, String currencyPair, Double persent, Double qty, String filePattern) {
         this.tradesPrices = tradesPrices;
         this.orderBookPrices = orderBookPrices;
         this.postRequests = postRequests;
         this.maxOrdersCount = maxOrdersCount;
         this.orderPriceDelta = orderPriceDelta;
         this.currencyPair = currencyPair;
+        this.persent = persent;
+        this.qty = qty;
+
+        this.logger = initLogger(filePattern);
     }
 
     void start() throws Exception {
@@ -42,19 +53,18 @@ class WorkAlgoritm {
         while (true) {
             createCorridors();
             boolean needNewCorridors = false;
-            Double actualSellPrice;
-            Double actualBuyPrice;
+            Double lastActualPrice;
             while (!needNewCorridors) {
-                actualSellPrice = tradesPrices.getActualSellPrice();
-                actualBuyPrice = tradesPrices.getActualBuyPrice();
-                System.out.println("In main menu: sell price - " + actualSellPrice + ", buy price - " + actualBuyPrice);
-                if (actualBuyPrice > lowerBorder && actualSellPrice < upperBorder) {
+                lastActualPrice = tradesPrices.getLastActualPrice();
+//                logger.info("In main menu: sell price - " + actualSellPrice + ", buy price - " + actualBuyPrice);
+                logger.info("In main menu: last actual price - " + lastActualPrice);
+                if (lastActualPrice > lowerBorder && lastActualPrice < upperBorder) {
                     actionInMainCorridor();
                 }
-                if (actualBuyPrice < lowerBorder && actualBuyPrice > lowestBorder) {
+                if (lastActualPrice < lowerBorder && lastActualPrice > lowestBorder) {
                     needNewCorridors = actionInLowCorridor();
                 }
-                if (actualSellPrice > upperBorder && actualSellPrice < uppestBorder) {
+                if (lastActualPrice > upperBorder && lastActualPrice < uppestBorder) {
                     needNewCorridors = actionInHighCorridor();
                 }
             }
@@ -62,30 +72,38 @@ class WorkAlgoritm {
     }
 
     private void createCorridors() {
-        Double actualPrice;
+        waitCondition();
+        Double actualPrice = tradesPrices.getLastActualPrice();
+        upperBorder = actualPrice * (1 + persent / 100);
+        lowerBorder = actualPrice * (1 - persent / 100);
+        uppestBorder = actualPrice * (1 + 2 * persent / 100);
+        lowestBorder = actualPrice * (1 - 2 * persent / 100);
+//        logger.info("");
+        logger.info("Корридор сделали: ");
+        logger.info("uppest border - " + uppestBorder);
+        logger.info("upper border - " + upperBorder);
+        logger.info("lower border - " + lowerBorder);
+        logger.info("lowest border - " + lowestBorder);
+//        logger.info("");
+    }
+
+    private void waitCondition() {
         if (upperBorder == null) {
-            synchronized (tradesPrices.getBuyPrice()) {
+            synchronized (tradesPrices.getActualPrice()) {
                 try {
-                    tradesPrices.getBuyPrice().wait();
+                    tradesPrices.getActualPrice().wait();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
-            actualPrice = (tradesPrices.getBuyPrice().get(0) + tradesPrices.getSellPrice().get(0)) / 2;
-        } else {
-            actualPrice = (tradesPrices.getActualBuyPrice() + tradesPrices.getActualSellPrice()) / 2;
+            synchronized (orderBookPrices.getAskPriceList()){
+                try {
+                    orderBookPrices.getAskPriceList().wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         }
-        upperBorder = actualPrice * 1.007;
-        lowerBorder = actualPrice * 0.993;
-        uppestBorder = actualPrice * 1.014;
-        lowestBorder = actualPrice * 0.986;
-        System.out.println();
-        System.out.println("Корридор сделали: ");
-        System.out.println("uppest border - " + uppestBorder);
-        System.out.println("upper border - " + upperBorder);
-        System.out.println("lower border - " + lowerBorder);
-        System.out.println("lowest border - " + lowestBorder);
-        System.out.println();
     }
 
     private void actionInMainCorridor() throws Exception {
@@ -96,19 +114,22 @@ class WorkAlgoritm {
         Double actualBuyPrice;
         Double upperAskPrice;
         Double upperBidPrice;
+        Double lastActualPrice;
         while (true) {
             actualSellPrice = tradesPrices.getActualSellPrice();
             actualBuyPrice = tradesPrices.getActualBuyPrice();
+            lastActualPrice = tradesPrices.getLastActualPrice();
             upperAskPrice = orderBookPrices.getActualAskPrice();
             upperBidPrice = orderBookPrices.getActualBidPrice();
-            System.out.println();
-            System.out.println("in main corridor buy price - " + actualBuyPrice);
-            System.out.println("in main corridor upper bid price - " + upperBidPrice);
-            System.out.println("in main corridor sell price - " + actualSellPrice);
-            System.out.println("in main corridor upper ask price - " + upperAskPrice);
-            System.out.println();
-            if (actualSellPrice < lowerBorder || actualBuyPrice > upperBorder) {
-                System.out.println("Exit from main corridor due price moved through lower or higher border");
+//            logger.info("");
+            logger.info("in main corridor last actual price - " + lastActualPrice);
+            logger.info("in main corridor buy price - " + actualBuyPrice);
+            logger.info("in main corridor upper bid price - " + upperBidPrice);
+            logger.info("in main corridor sell price - " + actualSellPrice);
+            logger.info("in main corridor upper ask price - " + upperAskPrice);
+//            logger.info("");
+            if (lastActualPrice < lowerBorder || lastActualPrice > upperBorder) {
+                logger.info("Exit from main corridor due price moved through lower or higher border");
                 return;
             }
             if (prevBuyPrice == null) {
@@ -127,33 +148,35 @@ class WorkAlgoritm {
                     if (price < upperBorder) {
                         if (type.equals("sell")) {
                             if (prevSellPrice >= actualSellPrice && upperAskPrice > price) {
-                                replaceOrderOnTopOfGlass(parameters, 1.0, upperAskPrice + orderPriceDelta);
-                                System.out.println("Replace order in main corridor due order from upper corridor");
+                                replaceOrderOnTopOfGlass(parameters, qty, upperAskPrice + orderPriceDelta);
+                                logger.info("Replace order in main corridor due order from upper corridor");
                             } else if (prevSellPrice < actualSellPrice) {
                                 cancelOrder(parameters);
-                                System.out.println("Cancel order in main corridor due order from upper corridor");
+                                logger.info("Cancel order in main corridor due order from upper corridor");
                             }
                         }
                     } else if (price > lowerBorder) {
                         if (type.equals("buy")) {
                             if (prevBuyPrice <= actualBuyPrice && upperBidPrice > price) {
-                                replaceOrderOnTopOfGlass(parameters, 1.0, upperBidPrice + orderPriceDelta);
-                                System.out.println("Replace order in main corridor due order from lower corridor");
+                                replaceOrderOnTopOfGlass(parameters, qty, upperBidPrice + orderPriceDelta);
+                                logger.info("Replace order in main corridor due order from lower corridor");
                             } else if (prevBuyPrice > actualBuyPrice) {
                                 cancelOrder(parameters);
-                                System.out.println("Cancel order in main corridor due order from lower corridor");
+                                logger.info("Cancel order in main corridor due order from lower corridor");
                             }
                         }
                     } else {
                         cancelOrder(parameters);
-                        System.out.println("Cancel order in main corridor due order from main corridor");
+                        logger.info("Cancel order in main corridor due order from main corridor");
                     }
                 }
             }
             prevBuyPrice = actualBuyPrice;
             prevSellPrice = actualSellPrice;
             count++;
-            System.out.println("Runway number in main corridor - " + count);
+            logger.info("Runway number in main corridor - " + count);
+            System.out.println("Поехали на паре: " + currencyPair);
+            sleep(2000);
         }
     }
 
@@ -161,29 +184,34 @@ class WorkAlgoritm {
     private boolean actionInLowCorridor() throws Exception {
         int count = 0;
         Double prevBuyPrice = null;
+        Double lastActualPrice;
         Double actualBuyPrice;
+        Double actualSellPrice;
         Double upperAskPrice;
         Double upperBidPrice;
         while (true) {
             actualBuyPrice = tradesPrices.getActualBuyPrice();
+            actualSellPrice = tradesPrices.getActualSellPrice();
             upperAskPrice = orderBookPrices.getActualAskPrice();
             upperBidPrice = orderBookPrices.getActualBidPrice();
-            System.out.println();
-            System.out.println("in low corridor sell price - " + actualBuyPrice);
-            System.out.println("in low corridor upper ask price - " + upperAskPrice);
-            System.out.println("in low corridor upper bid price - " + upperBidPrice);
-            System.out.println();
-            if (actualBuyPrice > lowerBorder) {
-                System.out.println("Exit in main corridor from low corridor due price moved through lower border");
+            lastActualPrice = tradesPrices.getLastActualPrice();
+//            logger.info("");
+            logger.info("in low corridor sell price - " + actualBuyPrice);
+            logger.info("in low corridor upper ask price - " + upperAskPrice);
+            logger.info("in low corridor upper bid price - " + upperBidPrice);
+//            logger.info("");
+            if (lastActualPrice > lowerBorder) {
+                logger.info("Exit in main corridor from low corridor due price moved through lower border");
                 return false;
             }
             if (prevBuyPrice == null) {
                 prevBuyPrice = actualBuyPrice;
                 continue;
             }
-            if (actualBuyPrice > prevBuyPrice && buyOrdersCount <= maxOrdersCount) {
-                createOrder(1.0, upperBidPrice + orderPriceDelta, "buy", currencyPair);
-                System.out.println("Create order in low corridor due good condition");
+            if (actualBuyPrice > prevBuyPrice && buyOrdersCount <= maxOrdersCount
+                    && !actualBuyPrice.equals(lastOrderPrice)) {
+                createOrder(qty, upperBidPrice + orderPriceDelta, "buy", currencyPair);
+                logger.info("Create order in low corridor due good condition");
             }
             if (postRequests.getUserOpenOrdersNum() > 0) {
                 Map<String, String> parameters;
@@ -192,28 +220,29 @@ class WorkAlgoritm {
                     parameters = getJsonValues(jsonObject);
                     price = parseDouble(parameters.get("price"));
                     if (price < upperBorder && price < upperAskPrice) {
-                        replaceOrderOnTopOfGlass(parameters, 1.0, upperAskPrice + orderPriceDelta);
-                        System.out.println("Replace order in low corridor due order from upper corridor");
+                        replaceOrderOnTopOfGlass(parameters, qty, upperAskPrice + orderPriceDelta);
+                        logger.info("Replace order in low corridor due order from upper corridor");
                     } else if (actualBuyPrice >= prevBuyPrice && price < upperBidPrice) {
-                        replaceOrderOnTopOfGlass(parameters, 1.0, upperBidPrice + orderPriceDelta);
-                        System.out.println("Replace order in low corridor due this order was created due good condition");
+                        replaceOrderOnTopOfGlass(parameters, qty, upperBidPrice + orderPriceDelta);
+                        logger.info("Replace order in low corridor due this order was created due good condition");
                     } else if (actualBuyPrice < prevBuyPrice) {
                         cancelOrder(parameters);
-                        System.out.println("Cancel order in low corridor due bad condition");
+                        logger.info("Cancel order in low corridor due bad condition");
                     }
                 }
             }
-            if (actualBuyPrice < lowestBorder) {
+            if (actualBuyPrice < lowestBorder || actualSellPrice < lowestBorder) {
                 if (sellOrdersCount <= maxOrdersCount) {
-                    createOrder(1.0, upperAskPrice + orderPriceDelta, "sell", currencyPair);
-                    System.out.println("Create order in low corridor due price below lowestBorder");
+                    createOrder(qty, upperAskPrice + orderPriceDelta, "sell", currencyPair);
+                    logger.info("Create order in low corridor due price below lowestBorder");
                 }
-                System.out.println("Exit in main menu for creating new corridors from low corridor due price moved through lowest border");
+                logger.info("Exit in main menu for creating new corridors from low corridor due price moved through lowest border");
                 return true;
             }
             prevBuyPrice = actualBuyPrice;
             count++;
-            System.out.println("Runway number in low corridor - " + count);
+            logger.info("Runway number in low corridor - " + count);
+            sleep(2000);
         }
     }
 
@@ -221,28 +250,33 @@ class WorkAlgoritm {
         int count = 0;
         Double prevSellPrice = null;
         Double actualSellPrice;
+        Double actualBuyPrice;
         Double upperAskPrice;
         Double upperBidPrice;
+        Double lastActualPrice;
         while (true) {
             actualSellPrice = tradesPrices.getActualSellPrice();
+            actualBuyPrice = tradesPrices.getActualBuyPrice();
             upperAskPrice = orderBookPrices.getActualAskPrice();
             upperBidPrice = orderBookPrices.getActualBidPrice();
-            System.out.println();
-            System.out.println("in high corridor buy price - " + actualSellPrice);
-            System.out.println("in high corridor upper ask price - " + upperAskPrice);
-            System.out.println("in high corridor upper bid price - " + upperBidPrice);
-            System.out.println();
-            if (actualSellPrice < upperBorder) {
-                System.out.println("Exit in main corridor from high corridor due price moved through upper border");
+            lastActualPrice = tradesPrices.getLastActualPrice();
+//            logger.info("");
+            logger.info("in high corridor buy price - " + actualSellPrice);
+            logger.info("in high corridor upper ask price - " + upperAskPrice);
+            logger.info("in high corridor upper bid price - " + upperBidPrice);
+//            logger.info("");
+            if (lastActualPrice < upperBorder) {
+                logger.info("Exit in main corridor from high corridor due price moved through upper border");
                 return false;
             }
             if (prevSellPrice == null) {
                 prevSellPrice = actualSellPrice;
                 continue;
             }
-            if (actualSellPrice < prevSellPrice && sellOrdersCount <= maxOrdersCount) {
-                createOrder(1.0, upperAskPrice + orderPriceDelta, "sell", currencyPair);
-                System.out.println("Create order in high corridor due good condition");
+            if (actualSellPrice < prevSellPrice && sellOrdersCount <= maxOrdersCount
+                    && !actualSellPrice.equals(lastOrderPrice)) {
+                createOrder(qty, upperAskPrice + orderPriceDelta, "sell", currencyPair);
+                logger.info("Create order in high corridor due good condition");
             }
             if (postRequests.getUserOpenOrdersNum() > 0) {
                 Map<String, String> parameters;
@@ -251,28 +285,29 @@ class WorkAlgoritm {
                     parameters = getJsonValues(jsonObject);
                     price = parseDouble(parameters.get("price"));
                     if (price > lowerBorder && price < upperBidPrice) {
-                        replaceOrderOnTopOfGlass(parameters, 1.0, upperBidPrice + orderPriceDelta);
-                        System.out.println("Replace order in high corridor due order from lower corridor");
+                        replaceOrderOnTopOfGlass(parameters, qty, upperBidPrice + orderPriceDelta);
+                        logger.info("Replace order in high corridor due order from lower corridor");
                     } else if (actualSellPrice <= prevSellPrice && price < upperAskPrice) {
-                        replaceOrderOnTopOfGlass(parameters, 1.0, upperAskPrice + orderPriceDelta);
-                        System.out.println("Replace order in high corridor due order was created due good condition");
+                        replaceOrderOnTopOfGlass(parameters, qty, upperAskPrice + orderPriceDelta);
+                        logger.info("Replace order in high corridor due order was created due good condition");
                     } else if (actualSellPrice > prevSellPrice) {
                         cancelOrder(parameters);
-                        System.out.println("Cancel order in high corridor due bad condition");
+                        logger.info("Cancel order in high corridor due bad condition");
                     }
                 }
             }
-            if (actualSellPrice > uppestBorder) {
+            if (actualSellPrice > uppestBorder || actualBuyPrice > uppestBorder) {
                 if (buyOrdersCount <= maxOrdersCount) {
-                    createOrder(1.0, upperBidPrice + orderPriceDelta, "buy", currencyPair);
-                    System.out.println("Create order in high corridor price upper uppestBorder");
+                    createOrder(qty, upperBidPrice + orderPriceDelta, "buy", currencyPair);
+                    logger.info("Create order in high corridor price upper uppestBorder");
                 }
-                System.out.println("Exit in main menu for creating new corridors from high corridor due price moved through hoghest border");
+                logger.info("Exit in main menu for creating new corridors from high corridor due price moved through hoghest border");
                 return true;
             }
             prevSellPrice = actualSellPrice;
             count++;
-            System.out.println("Runway number in high corridor - " + count);
+            logger.info("Runway number in high corridor - " + count);
+            sleep(2000);
         }
     }
 
@@ -295,9 +330,9 @@ class WorkAlgoritm {
         String type = parameters.get("type");
         JSONObject jsonObject = postRequests.sendPostRequestAndGetResponse("order_cancel", arguments);
         String result = jsonObject.get("result").toString();
-        System.out.println("Result of cancel order - " + result);
+        logger.info("Result of cancel order - " + result);
         if (!result.equals("true")) {
-            System.out.println("Error of cancel order - " + jsonObject.get("error"));
+            logger.info("Error of cancel order - " + jsonObject.get("error"));
             return;
         }
         if (type.equals("buy")) {
@@ -307,8 +342,8 @@ class WorkAlgoritm {
         } else {
             throw new Exception("Wrong type");
         }
-        System.out.println("Number of open buy orders - " + buyOrdersCount);
-        System.out.println("Number of open sell orders - " + sellOrdersCount);
+        logger.info("Number of open buy orders - " + buyOrdersCount);
+        logger.info("Number of open sell orders - " + sellOrdersCount);
     }
 
     private void createOrder(Double qty, Double price, String type, String currencyPair) throws Exception {
@@ -319,11 +354,12 @@ class WorkAlgoritm {
         arguments.put("type", type);
         JSONObject jsonObject = postRequests.sendPostRequestAndGetResponse("order_create", arguments);
         String result = jsonObject.get("result").toString();
-        System.out.println("Result of create order - " + result);
+        logger.info("Result of create order - " + result);
         if (!result.equals("true")) {
-            System.out.println("Error of create order - " + jsonObject.get("error"));
+            logger.info("Error of create order - " + jsonObject.get("error"));
             return;
         }
+        lastOrderPrice = price;
         if (type.equals("buy")) {
             buyOrdersCount++;
         } else if (type.equals("sell")) {
@@ -331,7 +367,21 @@ class WorkAlgoritm {
         } else {
             throw new Exception("Wrong type");
         }
-        System.out.println("Number of open buy orders - " + buyOrdersCount);
-        System.out.println("Number of open sell orders - " + sellOrdersCount);
+        logger.info("Number of open buy orders - " + buyOrdersCount);
+        logger.info("Number of open sell orders - " + sellOrdersCount);
+    }
+
+    private Logger initLogger(String filePattern) {
+        Logger logger = Logger.getLogger("Work process");
+
+        try {
+            FileHandler fhandler = new FileHandler("./logs/" + filePattern, 10000000, 15);
+            SimpleFormatter sformatter = new SimpleFormatter();
+            fhandler.setFormatter(sformatter);
+            logger.addHandler(fhandler);
+        } catch (SecurityException | IOException e) {
+            logger.severe("log error");
+        }
+        return logger;
     }
 }

@@ -21,6 +21,7 @@ class TradesPrices {
 
     private final List<Double> buyPrice = synchronizedList(new ArrayList<>());
     private final List<Double> sellPrice = synchronizedList(new ArrayList<>());
+    private final List<Double> actualPrice = synchronizedList(new ArrayList<>());
     private String currencyPair;
 
     TradesPrices(String currencyPair) {
@@ -38,8 +39,8 @@ class TradesPrices {
                 .build();
 
         getFirstSellAndBuyPrice(client, uri);
-        synchronized (buyPrice) {
-            buyPrice.notifyAll();
+        synchronized (actualPrice) {
+            actualPrice.notifyAll();
         }
         getActualSellOrBuyPrice(client, uri);
     }
@@ -49,6 +50,7 @@ class TradesPrices {
         HttpGet httpGet = new HttpGet(uri);
         HttpResponse response = client.execute(httpGet);
         JSONArray jsonArray = new JSONObject(EntityUtils.toString(response.getEntity())).getJSONArray(currencyPair);
+        actualPrice.add(parseDouble(jsonArray.getJSONObject(0).get("price").toString()));
         boolean checkFirstSellPrice = false;
         boolean checkFirstBuyPrice = false;
         for (int i = 0; i < jsonArray.length(); i++) {
@@ -72,7 +74,7 @@ class TradesPrices {
         }
     }
 
-    private void getActualSellOrBuyPrice(HttpClient client, URI ur) throws IOException, URISyntaxException {
+    private void getActualSellOrBuyPrice(HttpClient client, URI ur) throws IOException, URISyntaxException, InterruptedException {
         JSONObject jsonObject;
         String sellOrBuy;
         Double price;
@@ -93,6 +95,11 @@ class TradesPrices {
             sellOrBuy = jsonObject.get("type").toString();
             price = parseDouble(jsonObject.get("price").toString());
 
+            synchronized (actualPrice){
+                if (!price.equals(getLastActualPrice())){
+                    actualPrice.add(price);
+                }
+            }
             if (sellOrBuy.equals("buy")) {
                 synchronized (buyPrice) {
                     if (!price.equals(getActualBuyPrice())) {
@@ -106,6 +113,8 @@ class TradesPrices {
                     }
                 }
             }
+
+            sleep(5000);
         }
     }
 
@@ -132,6 +141,17 @@ class TradesPrices {
         synchronized (sellPrice) {
             int index = sellPrice.size() - 1;
             return sellPrice.get(index);
+        }
+    }
+
+    List<Double> getActualPrice(){
+        return actualPrice;
+    }
+
+    Double getLastActualPrice(){
+        synchronized (actualPrice){
+            int index = actualPrice.size() - 1;
+            return actualPrice.get(index);
         }
     }
 }
