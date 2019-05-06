@@ -7,6 +7,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import javax.crypto.Mac;
@@ -20,8 +21,10 @@ import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -33,14 +36,20 @@ class PostRequests {
 
     private String eKey;
     private String secret;
+    private Logger logger;
+
     private HttpClient client = create().build();
 
-    PostRequests(String eKey, String secret) {
+    private String currencyPair;
+
+    PostRequests(String eKey, String secret, String currencyPair) {
         this.eKey = eKey;
         this.secret = secret;
+        this.currencyPair = currencyPair;
+        logger = Main.initLogger("PostRequestsLog", "JsonExceptions");
     }
 
-    private JSONObject sendPostRequest(String method, Map<String, String> arguments) {
+    private JSONObject sendPostRequest(String method, Map<String, String> arguments) throws BotException {
 
         if (arguments == null) {
             arguments = new HashMap<>();
@@ -66,16 +75,16 @@ class PostRequests {
         Mac mac;
         try {
             mac = getInstance("HmacSHA512");
-        } catch (NoSuchAlgorithmException ee) {
-            System.err.println("No such algorithm exception: " + ee.toString());
-            return null;
+        } catch (NoSuchAlgorithmException e) {
+            throw new BotException("Error in PostPequests in thread with currency pair - " + currencyPair + " in method - " + method,
+                                    Arrays.toString(e.getStackTrace()));
         }
 
         try {
             mac.init(keySpec);
-        } catch (InvalidKeyException ike) {
-            System.err.println("Invalid key exception: " + ike.toString());
-            return null;
+        } catch (InvalidKeyException e) {
+            throw new BotException("Error in PostPequests in thread with currency pair - " + currencyPair + " in method - " + method,
+                                    Arrays.toString(e.getStackTrace()));
         }
 
         String sign = encodeHexString(mac.doFinal(postData.toString().getBytes(UTF_8)));
@@ -87,9 +96,9 @@ class PostRequests {
                     .setHost("api.exmo.me")
                     .setPath("/v1/" + method)
                     .build();
-        } catch (URISyntaxException ee) {
-            System.err.println("Bad URI request " + ee.toString());
-            return null;
+        } catch (URISyntaxException e) {
+            throw new BotException("Error in PostPequests in thread with currency pair - " + currencyPair + " in method - " + method,
+                                    Arrays.toString(e.getStackTrace()));
         }
 
         HttpPost httpPost = new HttpPost(uri);
@@ -112,8 +121,8 @@ class PostRequests {
             httpEntity = httpResponse.getEntity();
             is = httpEntity.getContent();
         } catch (IOException e) {
-            System.err.println("IOException " + e.toString());
-            return null;
+            throw new BotException("Error in PostPequests in thread with currency pair - " + currencyPair + " in method - " + method,
+                                    Arrays.toString(e.getStackTrace()));
         }
         StringBuilder sb = new StringBuilder();
         try {
@@ -124,22 +133,29 @@ class PostRequests {
             }
             is.close();
         } catch (IOException e) {
-            e.printStackTrace();
-            System.exit(-1);
+            throw new BotException("Error in PostPequests in thread with currency pair - " + currencyPair + " in method - " + method,
+                                    Arrays.toString(e.getStackTrace()));
         }
 
         return new JSONObject(sb.toString());
     }
 
-    JSONArray getUserOpenOrders(String currencyPair) {
-        return sendPostRequest("user_open_orders", null).getJSONArray(currencyPair);
+    JSONArray getUserOpenOrders(String currencyPair) throws BotException {
+        JSONObject jsonObject = sendPostRequest("user_open_orders", null);
+        try {
+            return jsonObject.getJSONArray(currencyPair);
+        } catch (JSONException e) {
+            logger.severe("Exception in parse response json for currency pair - " + currencyPair);
+            logger.severe(e.getMessage());
+            return new JSONArray();
+        }
     }
 
-    JSONObject sendPostRequestAndGetResponse(String method, Map<String, String> arguments) {
+    JSONObject sendPostRequestAndGetResponse(String method, Map<String, String> arguments) throws BotException {
         return sendPostRequest(method, arguments);
     }
 
-    Integer getUserOpenOrdersNum() {
+    Integer getUserOpenOrdersNum() throws BotException {
         return sendPostRequestAndGetResponse("user_open_orders", null).length();
     }
 }

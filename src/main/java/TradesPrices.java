@@ -10,10 +10,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static java.lang.Double.parseDouble;
-import static java.lang.Thread.*;
+import static java.lang.Thread.sleep;
 import static java.util.Collections.synchronizedList;
 import static org.apache.http.impl.client.HttpClientBuilder.create;
 
@@ -22,34 +23,45 @@ class TradesPrices {
     private final List<Double> buyPrice = synchronizedList(new ArrayList<>());
     private final List<Double> sellPrice = synchronizedList(new ArrayList<>());
     private final List<Double> actualPrice = synchronizedList(new ArrayList<>());
+    private HttpClient client = create().build();
+
     private String currencyPair;
 
     TradesPrices(String currencyPair) {
         this.currencyPair = currencyPair;
     }
 
-    private void method() throws IOException, URISyntaxException, InterruptedException {
-        HttpClient client = create().build();
+    private void method() throws BotException {
 
-        URI uri = new URIBuilder()
-                .setScheme("http")
-                .setHost("api.exmo.me")
-                .setPath("/v1/trades")
-                .setParameter("pair", currencyPair)
-                .build();
+        URI uri;
+        try {
+            uri = new URIBuilder()
+                    .setScheme("http")
+                    .setHost("api.exmo.me")
+                    .setPath("/v1/trades")
+                    .setParameter("pair", currencyPair)
+                    .build();
+        } catch (URISyntaxException e) {
+            throw new BotException("Error in TradesPrices in thread with currency pair - " + currencyPair,
+                                    Arrays.toString(e.getStackTrace()));
+        }
 
-        getFirstSellAndBuyPrice(client, uri);
+        getFirstSellAndBuyPrice(uri);
         synchronized (actualPrice) {
             actualPrice.notifyAll();
         }
-        getActualSellOrBuyPrice(client, uri);
+        getActualSellOrBuyPrice(uri);
     }
 
-    private void getFirstSellAndBuyPrice(HttpClient client, URI uri) throws IOException, InterruptedException {
-        sleep(3000);
+    private void getFirstSellAndBuyPrice(URI uri) throws BotException {
+        try {
+            sleep(3000);
+        } catch (InterruptedException e) {
+            throw new BotException("Error in TradesPrices in thread with currency pair - " + currencyPair,
+                                    Arrays.toString(e.getStackTrace()));
+        }
         HttpGet httpGet = new HttpGet(uri);
-        HttpResponse response = client.execute(httpGet);
-        JSONArray jsonArray = new JSONObject(EntityUtils.toString(response.getEntity())).getJSONArray(currencyPair);
+        JSONArray jsonArray = getResponseJsonArray(httpGet);
         actualPrice.add(parseDouble(jsonArray.getJSONObject(0).get("price").toString()));
         boolean checkFirstSellPrice = false;
         boolean checkFirstBuyPrice = false;
@@ -74,51 +86,69 @@ class TradesPrices {
         }
     }
 
-    private void getActualSellOrBuyPrice(HttpClient client, URI ur) throws IOException, URISyntaxException, InterruptedException {
-        JSONObject jsonObject;
+    private void getActualSellOrBuyPrice(URI ur) throws BotException {
+        JSONArray jsonArray;
         String sellOrBuy;
         Double price;
         HttpGet httpGet;
-        HttpResponse response;
+        JSONObject jsonObject;
 
-        URI uri = new URIBuilder(ur)
-                .setParameter("limit", "1")
-                .build();
+        URI uri;
+        try {
+            uri = new URIBuilder(ur)
+                    .setParameter("limit", "15")
+                    .build();
+        } catch (URISyntaxException e) {
+            throw new BotException("Error in TradesPrices in thread with currency pair - " + currencyPair,
+                                    Arrays.toString(e.getStackTrace()));
+        }
 
         while (true) {
 
             httpGet = new HttpGet(uri);
-            response = client.execute(httpGet);
-            jsonObject = new JSONObject(EntityUtils.toString(response.getEntity()))
-                    .getJSONArray(currencyPair)
-                    .getJSONObject(0);
-            sellOrBuy = jsonObject.get("type").toString();
-            price = parseDouble(jsonObject.get("price").toString());
+            jsonArray = getResponseJsonArray(httpGet);
 
-            synchronized (actualPrice){
-                if (!price.equals(getLastActualPrice())){
-                    actualPrice.add(price);
-                }
-            }
-            if (sellOrBuy.equals("buy")) {
-                synchronized (buyPrice) {
-                    if (!price.equals(getActualBuyPrice())) {
-                        buyPrice.add(price);
+            for (Object object: jsonArray) {
+
+                jsonObject = (JSONObject) object;
+
+                sellOrBuy = jsonObject.get("type").toString();
+                price = parseDouble(jsonObject.get("price").toString());
+
+                synchronized (actualPrice) {
+                    if (!price.equals(getLastActualPrice())) {
+                        actualPrice.add(price);
                     }
                 }
-            } else if (sellOrBuy.equals("sell")) {
-                synchronized (sellPrice) {
-                    if (!price.equals(getActualSellPrice())) {
-                        sellPrice.add(price);
+                if (sellOrBuy.equals("buy")) {
+                    synchronized (buyPrice) {
+                        if (!price.equals(getActualBuyPrice())) {
+                            buyPrice.add(price);
+                        } else {
+                            break;
+                        }
+                    }
+                } else if (sellOrBuy.equals("sell")) {
+                    synchronized (sellPrice) {
+                        if (!price.equals(getActualSellPrice())) {
+                            sellPrice.add(price);
+                        } else {
+                            break;
+                        }
                     }
                 }
-            }
 
-            sleep(5000);
+                try {
+                    sleep(5000);
+                } catch (InterruptedException e) {
+                    throw new BotException("Error in TradesPrices in thread with currency pair - " + currencyPair,
+                            Arrays.toString(e.getStackTrace()));
+                }
+            }
         }
     }
 
-    void exetute() throws IOException, URISyntaxException, InterruptedException {
+    void exetute() throws BotException {
         method();
     }
 
@@ -144,14 +174,32 @@ class TradesPrices {
         }
     }
 
-    List<Double> getActualPrice(){
+    List<Double> getActualPrice() {
         return actualPrice;
     }
 
-    Double getLastActualPrice(){
-        synchronized (actualPrice){
+    Double getLastActualPrice() {
+        synchronized (actualPrice) {
             int index = actualPrice.size() - 1;
             return actualPrice.get(index);
         }
+    }
+
+    private JSONArray getResponseJsonArray(HttpGet httpGet) throws BotException {
+        HttpResponse response;
+        try {
+            response = client.execute(httpGet);
+        } catch (IOException e) {
+            throw new BotException("Error in TradesPrices in thread with currency pair - " + currencyPair,
+                    Arrays.toString(e.getStackTrace()));
+        }
+        JSONArray jsonArray = null;
+        try {
+            jsonArray = new JSONObject(EntityUtils.toString(response.getEntity())).getJSONArray(currencyPair);
+        } catch (IOException e) {
+            throw new BotException("Error in TradesPrices in thread with currency pair - " + currencyPair,
+                    Arrays.toString(e.getStackTrace()));
+        }
+        return jsonArray;
     }
 }

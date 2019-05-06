@@ -1,11 +1,9 @@
 import org.json.JSONObject;
 
-import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.FileHandler;
 import java.util.logging.Logger;
-import java.util.logging.SimpleFormatter;
 
 import static java.lang.Double.parseDouble;
 import static java.lang.Thread.sleep;
@@ -18,24 +16,22 @@ class WorkAlgoritm {
     private Double maxOrdersCount;
     private Double orderPriceDelta;
     private String currencyPair;
+    private Double persent;
+    private Double qty;
 
     private Double upperBorder;
     private Double lowerBorder;
     private Double uppestBorder;
     private Double lowestBorder;
 
-    private Double persent;
-    private Double qty;
-
-    private Integer sellOrdersCount = 0;
-    private Integer buyOrdersCount = 0;
-
+    private Integer ordersCount = 0;
     private Double lastOrderPrice = 0.0;
 
     private Logger logger;
+    private Logger borderLogger;
 
-    WorkAlgoritm(TradesPrices tradesPrices, OrderBookPrices orderBookPrices, PostRequests postRequests,
-                 Double maxOrdersCount, Double orderPriceDelta, String currencyPair, Double persent, Double qty, String filePattern) {
+    WorkAlgoritm(TradesPrices tradesPrices, OrderBookPrices orderBookPrices, PostRequests postRequests, Double maxOrdersCount,
+                 Double orderPriceDelta, String currencyPair, Double persent, Double qty, String filePattern) {
         this.tradesPrices = tradesPrices;
         this.orderBookPrices = orderBookPrices;
         this.postRequests = postRequests;
@@ -45,10 +41,11 @@ class WorkAlgoritm {
         this.persent = persent;
         this.qty = qty;
 
-        this.logger = initLogger(filePattern);
+        this.logger = Main.initLogger("WorkStatLog", filePattern);
+        this.borderLogger = Main.initLogger("BorderStatLog", "borders_" + filePattern);
     }
 
-    void start() throws Exception {
+    void start() throws BotException {
 
         while (true) {
             createCorridors();
@@ -58,12 +55,15 @@ class WorkAlgoritm {
                 lastActualPrice = tradesPrices.getLastActualPrice();
 //                logger.info("In main menu: sell price - " + actualSellPrice + ", buy price - " + actualBuyPrice);
                 logger.info("In main menu: last actual price - " + lastActualPrice);
+                checkOpenOrders();
                 if (lastActualPrice > lowerBorder && lastActualPrice < upperBorder) {
                     actionInMainCorridor();
                 }
+                checkOpenOrders();
                 if (lastActualPrice < lowerBorder && lastActualPrice > lowestBorder) {
                     needNewCorridors = actionInLowCorridor();
                 }
+                checkOpenOrders();
                 if (lastActualPrice > upperBorder && lastActualPrice < uppestBorder) {
                     needNewCorridors = actionInHighCorridor();
                 }
@@ -71,42 +71,46 @@ class WorkAlgoritm {
         }
     }
 
-    private void createCorridors() {
-        waitCondition();
+    private void createCorridors() throws BotException {
+        if (upperBorder == null) {
+            waitCondition();
+        }
         Double actualPrice = tradesPrices.getLastActualPrice();
         upperBorder = actualPrice * (1 + persent / 100);
         lowerBorder = actualPrice * (1 - persent / 100);
         uppestBorder = actualPrice * (1 + 2 * persent / 100);
         lowestBorder = actualPrice * (1 - 2 * persent / 100);
 //        logger.info("");
-        logger.info("Корридор сделали: ");
-        logger.info("uppest border - " + uppestBorder);
-        logger.info("upper border - " + upperBorder);
-        logger.info("lower border - " + lowerBorder);
-        logger.info("lowest border - " + lowestBorder);
+        borderLogger.info("Корридор сделали: ");
+        borderLogger.info("uppest border - " + uppestBorder);
+        borderLogger.info("upper border - " + upperBorder);
+        borderLogger.info("lower border - " + lowerBorder);
+        borderLogger.info("lowest border - " + lowestBorder);
 //        logger.info("");
     }
 
-    private void waitCondition() {
-        if (upperBorder == null) {
-            synchronized (tradesPrices.getActualPrice()) {
-                try {
-                    tradesPrices.getActualPrice().wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+    private void waitCondition() throws BotException {
+        synchronized (tradesPrices.getActualPrice()) {
+            try {
+                tradesPrices.getActualPrice().wait();
+            } catch (InterruptedException e) {
+                throw new BotException("Error in main algoritm in waiting trade prices in thread for currency pair - "
+                                        + currencyPair,
+                                        Arrays.toString(e.getStackTrace()));
             }
-            synchronized (orderBookPrices.getAskPriceList()){
-                try {
-                    orderBookPrices.getAskPriceList().wait();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+        }
+        synchronized (orderBookPrices.getAskPriceList()) {
+            try {
+                orderBookPrices.getAskPriceList().wait();
+            } catch (InterruptedException e) {
+                throw new BotException("Error in main algoritm in waiting order book prices in thread for currency pair - "
+                                        + currencyPair,
+                                        Arrays.toString(e.getStackTrace()));
             }
         }
     }
 
-    private void actionInMainCorridor() throws Exception {
+    private void actionInMainCorridor() throws BotException {
         int count = 0;
         Double prevBuyPrice = null;
         Double prevSellPrice = null;
@@ -122,11 +126,11 @@ class WorkAlgoritm {
             upperAskPrice = orderBookPrices.getActualAskPrice();
             upperBidPrice = orderBookPrices.getActualBidPrice();
 //            logger.info("");
-            logger.info("in main corridor last actual price - " + lastActualPrice);
-            logger.info("in main corridor buy price - " + actualBuyPrice);
-            logger.info("in main corridor upper bid price - " + upperBidPrice);
-            logger.info("in main corridor sell price - " + actualSellPrice);
-            logger.info("in main corridor upper ask price - " + upperAskPrice);
+            logger.info("in main corridor last actual price - " + lastActualPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in main corridor buy price - " + actualBuyPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in main corridor upper bid price - " + upperBidPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in main corridor sell price - " + actualSellPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in main corridor upper ask price - " + upperAskPrice + " for cuurency pair - " + currencyPair);
 //            logger.info("");
             if (lastActualPrice < lowerBorder || lastActualPrice > upperBorder) {
                 logger.info("Exit from main corridor due price moved through lower or higher border");
@@ -137,7 +141,7 @@ class WorkAlgoritm {
                 prevSellPrice = actualSellPrice;
                 continue;
             }
-            if (postRequests.getUserOpenOrdersNum() > 0) {
+            if (ordersCount != 0) {
                 Map<String, String> parameters;
                 Double price;
                 String type;
@@ -174,14 +178,20 @@ class WorkAlgoritm {
             prevBuyPrice = actualBuyPrice;
             prevSellPrice = actualSellPrice;
             count++;
-            logger.info("Runway number in main corridor - " + count);
+            logger.info("Runway number in main corridor - " + count + ", with order count - " + ordersCount +
+                    ", with currency pair - " + currencyPair);
             System.out.println("Поехали на паре: " + currencyPair);
-            sleep(2000);
+            try {
+                sleep(2000);
+            } catch (InterruptedException e) {
+                throw new BotException("Error in main algoritm for currency pair - " + currencyPair,
+                                        Arrays.toString(e.getStackTrace()));
+            }
         }
     }
 
 
-    private boolean actionInLowCorridor() throws Exception {
+    private boolean actionInLowCorridor() throws BotException {
         int count = 0;
         Double prevBuyPrice = null;
         Double lastActualPrice;
@@ -196,9 +206,9 @@ class WorkAlgoritm {
             upperBidPrice = orderBookPrices.getActualBidPrice();
             lastActualPrice = tradesPrices.getLastActualPrice();
 //            logger.info("");
-            logger.info("in low corridor sell price - " + actualBuyPrice);
-            logger.info("in low corridor upper ask price - " + upperAskPrice);
-            logger.info("in low corridor upper bid price - " + upperBidPrice);
+            logger.info("in low corridor sell price - " + actualBuyPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in low corridor upper ask price - " + upperAskPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in low corridor upper bid price - " + upperBidPrice + " for cuurency pair - " + currencyPair);
 //            logger.info("");
             if (lastActualPrice > lowerBorder) {
                 logger.info("Exit in main corridor from low corridor due price moved through lower border");
@@ -208,12 +218,12 @@ class WorkAlgoritm {
                 prevBuyPrice = actualBuyPrice;
                 continue;
             }
-            if (actualBuyPrice > prevBuyPrice && buyOrdersCount <= maxOrdersCount
+            if (actualBuyPrice > prevBuyPrice && ordersCount <= maxOrdersCount
                     && !actualBuyPrice.equals(lastOrderPrice)) {
                 createOrder(qty, upperBidPrice + orderPriceDelta, "buy", currencyPair);
                 logger.info("Create order in low corridor due good condition");
             }
-            if (postRequests.getUserOpenOrdersNum() > 0) {
+            if (ordersCount != 0) {
                 Map<String, String> parameters;
                 Double price;
                 for (Object jsonObject : postRequests.getUserOpenOrders(currencyPair)) {
@@ -232,7 +242,7 @@ class WorkAlgoritm {
                 }
             }
             if (actualBuyPrice < lowestBorder || actualSellPrice < lowestBorder) {
-                if (sellOrdersCount <= maxOrdersCount) {
+                if (ordersCount >= -maxOrdersCount) {
                     createOrder(qty, upperAskPrice + orderPriceDelta, "sell", currencyPair);
                     logger.info("Create order in low corridor due price below lowestBorder");
                 }
@@ -241,12 +251,18 @@ class WorkAlgoritm {
             }
             prevBuyPrice = actualBuyPrice;
             count++;
-            logger.info("Runway number in low corridor - " + count);
-            sleep(2000);
+            logger.info("Runway number in low corridor - " + count + ", with order count - " + ordersCount +
+                    ", with currency pair - " + currencyPair);
+            try {
+                sleep(2000);
+            } catch (InterruptedException e) {
+                throw new BotException("Error in main algoritm for currency pair - " + currencyPair,
+                                        Arrays.toString(e.getStackTrace()));
+            }
         }
     }
 
-    private boolean actionInHighCorridor() throws Exception {
+    private boolean actionInHighCorridor() throws BotException {
         int count = 0;
         Double prevSellPrice = null;
         Double actualSellPrice;
@@ -261,9 +277,9 @@ class WorkAlgoritm {
             upperBidPrice = orderBookPrices.getActualBidPrice();
             lastActualPrice = tradesPrices.getLastActualPrice();
 //            logger.info("");
-            logger.info("in high corridor buy price - " + actualSellPrice);
-            logger.info("in high corridor upper ask price - " + upperAskPrice);
-            logger.info("in high corridor upper bid price - " + upperBidPrice);
+            logger.info("in high corridor sell price - " + actualSellPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in high corridor upper ask price - " + upperAskPrice + " for cuurency pair - " + currencyPair);
+            logger.info("in high corridor upper bid price - " + upperBidPrice + " for cuurency pair - " + currencyPair);
 //            logger.info("");
             if (lastActualPrice < upperBorder) {
                 logger.info("Exit in main corridor from high corridor due price moved through upper border");
@@ -273,12 +289,12 @@ class WorkAlgoritm {
                 prevSellPrice = actualSellPrice;
                 continue;
             }
-            if (actualSellPrice < prevSellPrice && sellOrdersCount <= maxOrdersCount
+            if (actualSellPrice < prevSellPrice && ordersCount >= -maxOrdersCount
                     && !actualSellPrice.equals(lastOrderPrice)) {
                 createOrder(qty, upperAskPrice + orderPriceDelta, "sell", currencyPair);
                 logger.info("Create order in high corridor due good condition");
             }
-            if (postRequests.getUserOpenOrdersNum() > 0) {
+            if (ordersCount != 0) {
                 Map<String, String> parameters;
                 Double price;
                 for (Object jsonObject : postRequests.getUserOpenOrders(currencyPair)) {
@@ -297,7 +313,7 @@ class WorkAlgoritm {
                 }
             }
             if (actualSellPrice > uppestBorder || actualBuyPrice > uppestBorder) {
-                if (buyOrdersCount <= maxOrdersCount) {
+                if (ordersCount <= maxOrdersCount) {
                     createOrder(qty, upperBidPrice + orderPriceDelta, "buy", currencyPair);
                     logger.info("Create order in high corridor price upper uppestBorder");
                 }
@@ -306,8 +322,14 @@ class WorkAlgoritm {
             }
             prevSellPrice = actualSellPrice;
             count++;
-            logger.info("Runway number in high corridor - " + count);
-            sleep(2000);
+            logger.info("Runway number in high corridor - " + count + ", with order count - " + ordersCount +
+                    ", with currency pair - " + currencyPair);
+            try {
+                sleep(2000);
+            } catch (InterruptedException e) {
+                throw new BotException("Error in main algoritm for currency pair - " + currencyPair,
+                                        Arrays.toString(e.getStackTrace()));
+            }
         }
     }
 
@@ -319,12 +341,12 @@ class WorkAlgoritm {
         return parameters;
     }
 
-    private void replaceOrderOnTopOfGlass(Map<String, String> parameters, Double qty, Double price) throws Exception {
+    private void replaceOrderOnTopOfGlass(Map<String, String> parameters, Double qty, Double price) throws BotException {
         cancelOrder(parameters);
         createOrder(qty, price, parameters.get("type"), currencyPair);
     }
 
-    private void cancelOrder(Map<String, String> parameters) throws Exception {
+    private void cancelOrder(Map<String, String> parameters) throws BotException {
         Map<String, String> arguments = new HashMap<>();
         arguments.put("order_id", parameters.get("orderId"));
         String type = parameters.get("type");
@@ -336,17 +358,18 @@ class WorkAlgoritm {
             return;
         }
         if (type.equals("buy")) {
-            buyOrdersCount--;
+            ordersCount--;
         } else if (type.equals("sell")) {
-            sellOrdersCount--;
+            ordersCount++;
         } else {
-            throw new Exception("Wrong type");
+            throw new BotException("Error in cancel order in main algoritm for currency pair - " + currencyPair +
+                                    ". Wrong type of order", null);
         }
-        logger.info("Number of open buy orders - " + buyOrdersCount);
-        logger.info("Number of open sell orders - " + sellOrdersCount);
+        logger.info("Number of open buy orders - " + ordersCount);
+        logger.info("Number of open sell orders - " + -ordersCount);
     }
 
-    private void createOrder(Double qty, Double price, String type, String currencyPair) throws Exception {
+    private void createOrder(Double qty, Double price, String type, String currencyPair) throws BotException {
         Map<String, String> arguments = new HashMap<>();
         arguments.put("pair", currencyPair);
         arguments.put("quantity", qty.toString());
@@ -361,27 +384,29 @@ class WorkAlgoritm {
         }
         lastOrderPrice = price;
         if (type.equals("buy")) {
-            buyOrdersCount++;
+            ordersCount++;
         } else if (type.equals("sell")) {
-            sellOrdersCount++;
+            ordersCount--;
         } else {
-            throw new Exception("Wrong type");
+            throw new BotException("Error in cancel order in main algoritm for currency pair - " + currencyPair +
+                                    ". Wrong type of order", null);
         }
-        logger.info("Number of open buy orders - " + buyOrdersCount);
-        logger.info("Number of open sell orders - " + sellOrdersCount);
+        logger.info("Number of open buy orders - " + ordersCount);
+        logger.info("Number of open sell orders - " + -ordersCount);
     }
 
-    private Logger initLogger(String filePattern) {
-        Logger logger = Logger.getLogger("Work process");
-
-        try {
-            FileHandler fhandler = new FileHandler("./logs/" + filePattern, 10000000, 15);
-            SimpleFormatter sformatter = new SimpleFormatter();
-            fhandler.setFormatter(sformatter);
-            logger.addHandler(fhandler);
-        } catch (SecurityException | IOException e) {
-            logger.severe("log error");
+    private void checkOpenOrders() throws BotException {
+        int orders = 0;
+        if (postRequests.getUserOpenOrdersNum() > 0) {
+            for (Object jsonObject : postRequests.getUserOpenOrders(currencyPair)) {
+                String type = ((JSONObject) jsonObject).get("type").toString();
+                if (type.equals("buy")) {
+                    orders++;
+                } else if (type.equals("sell")) {
+                    orders--;
+                }
+            }
         }
-        return logger;
+        ordersCount = orders;
     }
 }
