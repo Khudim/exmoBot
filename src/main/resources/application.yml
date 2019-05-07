@@ -1,0 +1,29 @@
+url:
+  ask: http://api.exmo.me/v1/order_book
+
+request:
+  key: K-cfa9fc252e2f0b57b17786ee119efa10392c6686
+  secret: S-1261694bb16beecf19c2eadac2b23ed4711996e3
+
+task:
+  currencies:
+    - qty: 145.1
+      maxOrderCount: 7.0
+      delta: 0.0000001
+      percent: 0.7
+      pair: TRX_USD
+      filePattern: trx_usd.txt
+
+    - qty: 0.011
+      maxOrderCount: 3.0
+      delta: 0.0000001
+      percent: 0.7
+      pair: BTC_USD
+      filePattern: btc_usd.txt
+
+    - qty: 0.05
+      maxOrderCount: 12.0
+      delta: 0.0000001
+      percent: 0.7
+      pair: EHT_USD
+      filePattern: eth_usd.txt
